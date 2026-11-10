@@ -176,7 +176,7 @@ Por tanto, el workflow puede aparecer como correcto sin haber ejecutado las prue
 - `ms-transfers`: `TransferService.create` comprueba `amount.signum() <= 0` y responde 400 con `IMPORTE_NO_VALIDO`.
 - `ms-accounts`: `MovementRequest.amount` lleva `@Positive`, de modo que el endpoint interno también rechaza importes de cero o negativos.
 
-**Verificación:** test automático con -100 €; los 5 tests de transferencias pasan.
+**Verificación:** tests automáticos con -100 €: se rechaza en transferencias (5 tests) y en la validación del importe del ledger (1 test).
 
 **Pendiente:** los saldos ya alterados hay que corregirlos a mano.
 
