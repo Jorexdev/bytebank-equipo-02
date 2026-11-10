@@ -19,7 +19,7 @@ x-common-env: &common-env
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bytebank}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
@@ -55,7 +55,11 @@ services:
     ports:
       - "29092:29092"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1",
+        ]
       interval: 10s
       timeout: 10s
       retries: 12
