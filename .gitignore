@@ -1,5 +1,25 @@
+# Maven
 target/
+
+# Variables de entorno y secretos
 .env
+.env.*
+!.env.example
+
+# IntelliJ IDEA
 .idea/
 *.iml
+
+# Visual Studio Code
 .vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Archivos temporales
+*.tmp
+*.swp
