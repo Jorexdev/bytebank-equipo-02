@@ -58,6 +58,17 @@ curl -s localhost:8080/api/accounts -H "Authorization: Bearer $TOKEN"
 
 Los tests de integración usan Testcontainers, así que necesitan Docker arrancado.
 
+## Integración continua (CI)
+
+El proyecto utiliza **GitHub Actions** para validar automáticamente los cambios.
+
+El workflow se ejecuta en cada `push` y en cada Pull Request, mediante dos trabajos independientes que se ejecutan en paralelo:
+
+- **Maven tests:** configura Java 17 y ejecuta `./mvnw -B -fae verify` para compilar el proyecto y ejecutar las pruebas automatizadas de los módulos.
+- **Docker build:** construye las imágenes Docker de los siete microservicios utilizando el Dockerfile principal. Las imágenes se generan localmente en el entorno de CI y no se publican en ningún registro.
+
+Si alguna de las comprobaciones falla, la ejecución global de la CI se marca como fallida.
+
 ## Estado del proyecto (junio de 2026)
 
 Notas para quien coja el proyecto:

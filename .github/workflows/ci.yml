@@ -1,19 +1,57 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  tests:
+    name: Maven tests
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
+          cache: maven
 
-      # Los tests de integración no pasan en el runner (algo de Docker); de momento solo compilamos
-      # para no bloquear las PR. Hay que volver a activarlos.
-      - name: Build
-        run: mvn -B -q package -DskipTests || true
+      - name: Run tests
+        run: ./mvnw -B -fae verify
+
+  docker-build:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build microservices images
+        run: |
+          for module in \
+            ms-gateway \
+            ms-auth \
+            ms-accounts \
+            ms-transfers \
+            ms-cards \
+            ms-fraud \
+            ms-notifications
+          do
+            echo "Building image for ${module}"
+            docker buildx build \
+              --load \
+              --build-arg MODULE="${module}" \
+              --tag "bytebank/${module}:ci" \
+              .
+          done
