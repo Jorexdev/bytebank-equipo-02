@@ -23,7 +23,7 @@ FROM eclipse-temurin:17-jdk-alpine AS jre-builder
 RUN apk add --no-cache binutils
 
 RUN jlink \
-    --add-modules java.base,java.logging,java.naming,java.sql,java.xml,java.management,java.instrument,java.desktop,java.security.jgss,java.transaction.xa,java.compiler,java.net.http,jdk.crypto.ec \
+    --add-modules java.base,java.logging,java.naming,java.sql,java.xml,java.management,java.instrument,java.desktop,java.security.jgss,java.transaction.xa,java.compiler,java.net.http,jdk.crypto.ec,jdk.unsupported \
     --strip-debug \
     --no-man-pages \
     --no-header-files \
