@@ -146,23 +146,36 @@ AUTH_URL: http://ms-auth:8081
 
 ### 4.3. Configuración de integración continua
 
-**Estado:** problema confirmado mediante revisión del workflow.
+**Estado:** configuración anterior corregida en la rama `ci/CI-01-real-tests-docker`. Pendiente de verificar mediante GitHub Actions.
 
-El archivo `.github/workflows/ci.yml` ejecuta:
+En el archivo `.github/workflows/ci.yml` se identificó una configuración que ejecutaba:
 
 ```yaml
 - name: Build
   run: mvn -B -q package -DskipTests || true
 ```
 
-Se han identificado dos problemas:
+Se identificaron dos problemas:
 
-- `-DskipTests` impide ejecutar las pruebas durante la compilación.
-- `|| true` hace que el comando devuelva un resultado satisfactorio aunque Maven haya fallado.
+- `-DskipTests` impedía ejecutar las pruebas durante la compilación.
+- `|| true` hacía que el comando devolviera un resultado satisfactorio aunque Maven hubiera fallado.
 
-Por tanto, el workflow puede aparecer como correcto sin haber ejecutado las pruebas e incluso aunque la compilación falle.
+**Corrección implementada:**
 
-**Pendiente:** revisar las pruebas existentes y configurar una CI que ejecute las comprobaciones necesarias y bloquee las integraciones cuando fallen.
+Se ha sustituido la configuración anterior por dos trabajos independientes:
+
+- **Maven tests:** configura Java 17 y ejecuta `./mvnw -B -fae verify`, incluyendo las pruebas automatizadas.
+- **Build Docker images:** construye las imágenes Docker de los siete microservicios mediante Docker Buildx.
+
+Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución global de CI queda marcada como fallida.
+
+**Verificación local:**
+
+- La ejecución de `./mvnw -B -fae verify` detectó los errores de inicialización de `ms-accounts` causados por la migración Flyway V3.
+- Los demás módulos independientes completaron correctamente su ejecución.
+- Se construyeron correctamente las imágenes Docker de los siete microservicios.
+
+**Pendiente:** publicar la rama, comprobar la ejecución de ambos trabajos en GitHub Actions y configurar, si procede, los controles de protección de la rama para exigir que las comprobaciones sean satisfactorias antes de integrar cambios.
 
 ## 5. Funcionalidades incompletas identificadas
 
@@ -249,7 +262,7 @@ Los siguientes puntos requieren una revisión específica:
 - **Kafka:** comprobar que los eventos solo se publiquen cuando la operación correspondiente se haya confirmado y que los consumidores gestionen correctamente los mensajes repetidos.
 - **Notificaciones:** verificar la persistencia y consulta de avisos, así como su idempotencia.
 - **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.
-- **CI:** comprobar que las pruebas unitarias y de integración se ejecutan de forma fiable.
+- **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
 - **Zonas horarias:** investigar la incidencia del test `filterByDateIncludesLastDay` y comprobar que el tratamiento de fechas sea consistente entre entornos.
 
 Estos puntos son líneas de investigación y no deben considerarse defectos confirmados hasta reproducirlos o verificar su causa.
@@ -258,7 +271,7 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 
 1. Resolver los problemas que impiden el arranque completo del entorno.
 2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
-3. Revisar y corregir la configuración de integración continua.
+3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
 4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
 5. Investigar el test omitido por la incidencia de zona horaria.
 6. Investigar y documentar las incidencias funcionales y de seguridad.
