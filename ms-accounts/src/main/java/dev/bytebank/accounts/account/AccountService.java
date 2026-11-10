@@ -43,7 +43,9 @@ public class AccountService {
 
     @Transactional(readOnly = true)
     public Account get(String iban) {
-        return accounts.findByIban(Iban.normalize(iban)).get();
+        return accounts.findByIban(Iban.normalize(iban))
+                .orElseThrow(() -> ApiException.notFound("CUENTA_NO_ENCONTRADA",
+                        "No existe la cuenta " + iban));
     }
 
     @Transactional
