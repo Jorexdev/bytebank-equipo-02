@@ -77,8 +77,8 @@ Por tanto, aunque los contenedores se creen, el sistema todavía no está operat
 
 ### 4.1. Error en la migración de ms-accounts
 
-**Estado:** reproducido y causa identificada.  
-**Impacto:** bloquea el arranque de `ms-accounts`.
+**Estado:** corregido y verificado en el entorno local.  
+**Impacto:** bloqueaba el arranque de `ms-accounts`.
 
 La migración `V3__accounts_owner_index.sql` intenta crear un índice sobre una columna llamada `owner`:
 
@@ -112,7 +112,15 @@ En el módulo `ms-accounts`:
 
 Los cuatro errores no corresponden a fallos independientes de la lógica de negocio: los tests no llegan a ejecutarla porque el contexto de Spring Boot no consigue inicializarse.
 
-**Pendiente:** acordar y aplicar la corrección de la migración y comprobar que el servicio inicia correctamente y que las pruebas de integración se ejecutan.
+**Corrección aplicada:** la migración crea el índice sobre la columna correcta:
+
+```sql
+CREATE INDEX idx_accounts_owner ON accounts (owner_id);
+```
+
+**Verificación:** con el entorno levantado, Flyway aplica la versión 3 sin errores, `ms-accounts` arranca, la consulta de cuentas responde y las pruebas funcionales del Gateway se ejecutan con normalidad.
+
+**Pendiente:** repetir la ejecución de `LedgerServiceIntegrationTest` y confirmar el resultado en CI.
 
 ### 4.2. Puerto incorrecto en la comunicación entre Gateway y autenticación
 
@@ -163,6 +171,35 @@ Se han identificado dos problemas:
 Por tanto, el workflow puede aparecer como correcto sin haber ejecutado las pruebas e incluso aunque la compilación falle.
 
 **Pendiente:** revisar las pruebas existentes y configurar una CI que ejecute las comprobaciones necesarias y bloquee las integraciones cuando fallen.
+
+### 4.4. BUG-01 — Transferencia con importe negativo
+
+**Estado:** corregido en código, pendiente de probar en el entorno.
+**Impacto:** permite mover dinero en el sentido contrario al esperado.
+
+**Causa:** el importe no se validaba. Restar un negativo suma, y sumar un negativo resta.
+
+**Corrección:**
+
+- `ms-transfers`: `TransferService.create` comprueba `amount.signum() <= 0` y responde 400 con `IMPORTE_NO_VALIDO`.
+- `ms-accounts`: `MovementRequest.amount` lleva `@Positive`, de modo que el endpoint interno también rechaza importes de cero o negativos.
+
+**Verificación:** tests automáticos con -100 €: se rechaza en transferencias (5 tests) y en la validación del importe del ledger (1 test).
+
+**Pendiente:** los saldos ya alterados hay que corregirlos a mano.
+
+### 4.5. BUG-02 — IBAN inexistente devuelve 500
+
+**Estado:** corregido en código, pendiente de probar en el entorno.
+**Impacto:** consultar una cuenta que no existe devuelve error de servidor, y una transferencia desde una cuenta inexistente responde 503.
+
+**Causa:** `AccountService.get` sacaba el valor de un `Optional` vacío con `.get()`. Eso lanzaba una excepción no controlada y acababa en `500 ERROR_INTERNO`. Al transferir, el 500 remoto se traducía en `503 SERVICIO_NO_DISPONIBLE`.
+
+**Corrección:** `AccountService.get` responde `404 CUENTA_NO_ENCONTRADA` cuando el IBAN no existe. Cubre la consulta de cuenta, el extracto, el cambio de estado, el ingreso y la consulta interna.
+
+**Verificación:** tests automáticos: un IBAN desconocido da 404, un IBAN conocido devuelve la cuenta y una transferencia desde una cuenta inexistente da 404 sin crearse.
+
+**Pendiente:** probar con la API real a través del Gateway.
 
 ## 5. Funcionalidades incompletas identificadas
 
