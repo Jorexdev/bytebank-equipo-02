@@ -9,7 +9,7 @@ x-common-env: &common-env
   DB_USER: ${POSTGRES_USER:-bytebank}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
   INTERNAL_KEY: ${INTERNAL_KEY:?Falta INTERNAL_KEY en .env}
-  AUTH_URL: http://ms-auth:8018
+  AUTH_URL: http://ms-auth:8081
   ACCOUNTS_URL: http://ms-accounts:8082
   TRANSFERS_URL: http://ms-transfers:8083
   CARDS_URL: http://ms-cards:8084

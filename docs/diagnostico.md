@@ -114,31 +114,35 @@ Los cuatro errores no corresponden a fallos independientes de la lógica de nego
 
 **Pendiente:** acordar y aplicar la corrección de la migración y comprobar que el servicio inicia correctamente y que las pruebas de integración se ejecutan.
 
-### 4.2. Inconsistencia en la URL de ms-auth
+### 4.2. Puerto incorrecto en la comunicación entre Gateway y autenticación
 
-**Estado:** incidencia confirmada mediante pruebas funcionales y análisis de logs.
+**Estado:** corregido y verificado funcionalmente.
 
-En `docker-compose.yml` se establece:
+En la configuración original de `docker-compose.yml` se establecía:
 
 ```yaml
 AUTH_URL: http://ms-auth:8018
 ```
 
-Sin embargo, `ms-auth` escucha en el puerto 8081, según su configuración y sus registros de arranque.
+Sin embargo, ms-auth escucha en el puerto 8081, según su configuración y sus registros de arranque.
 
-El Gateway utiliza `AUTH_URL` para configurar la ruta hacia el servicio de autenticación.
+**Causa raíz confirmada:** el puerto configurado para la comunicación interna no coincidía con el puerto real de escucha de ms-auth.
 
-**Causa raíz confirmada:** el puerto configurado para la comunicación interna no coincide con el puerto real de escucha de `ms-auth`.
+**Corrección aplicada:** se ha cambiado `AUTH_URL` a:
 
-**Verificación funcional:**
+```yaml
+AUTH_URL: http://ms-auth:8081
+```
 
-- Login directo a `http://localhost:8081/api/auth/login`: HTTP 200.
-- Login a través de `http://localhost:8080/api/auth/login`: HTTP 500.
-- Los logs del Gateway muestran `Connection refused` al intentar conectar con `ms-auth:8018`.
+**Verificación funcional a través del Gateway:**
 
-**Impacto confirmado:** las peticiones de autenticación realizadas a través del Gateway fallan porque no pueden alcanzar `ms-auth`.
+- Credenciales correctas: HTTP 200.
+- Contraseña incorrecta: HTTP 401 Unauthorized.
+- Se ha comprobado que el Gateway puede comunicarse con ms-auth después de que ambos servicios hayan terminado de arrancar.
 
-**Pendiente:** corregir la configuración y repetir la prueba de login a través del Gateway para verificar la solución.
+**Observación:** inmediatamente después de recrear el Gateway puede ser necesario esperar a que termine su arranque antes de enviar peticiones. Se observó una respuesta HTTP 000 seguida de respuestas correctas (200 y 401).
+
+**Resultado:** la incidencia original del puerto incorrecto queda resuelta. El problema de la migración Flyway V3 de ms-accounts permanece pendiente y es independiente de esta corrección.
 
 ### 4.3. Configuración de integración continua
 
@@ -253,7 +257,7 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 ## 8. Próximas actuaciones
 
 1. Resolver los problemas que impiden el arranque completo del entorno.
-2. Validar el login y las comunicaciones a través del Gateway.
+2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
 3. Revisar y corregir la configuración de integración continua.
 4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
 5. Investigar el test omitido por la incidencia de zona horaria.
