@@ -90,4 +90,18 @@ class TransferServiceTest {
 
         verify(accounts, never()).debit(anyString(), anyString(), any(), any());
     }
+
+    @Test
+    void transferFromUnknownAccountIsNotFound() {
+        when(accounts.getAccount(ORIGIN)).thenThrow(
+                ApiException.notFound("CUENTA_NO_ENCONTRADA", "No existe la cuenta"));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("100.00"), null), ANA))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getStatus())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+
+        verify(transfers, never()).save(any());
+    }
 }

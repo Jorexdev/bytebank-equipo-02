@@ -180,6 +180,19 @@ Por tanto, el workflow puede aparecer como correcto sin haber ejecutado las prue
 
 **Pendiente:** los saldos ya alterados hay que corregirlos a mano.
 
+### 4.5. BUG-02 — IBAN inexistente devuelve 500
+
+**Estado:** corregido en código, pendiente de probar en el entorno.
+**Impacto:** consultar una cuenta que no existe devuelve error de servidor, y una transferencia desde una cuenta inexistente responde 503.
+
+**Causa:** `AccountService.get` sacaba el valor de un `Optional` vacío con `.get()`. Eso lanzaba una excepción no controlada y acababa en `500 ERROR_INTERNO`. Al transferir, el 500 remoto se traducía en `503 SERVICIO_NO_DISPONIBLE`.
+
+**Corrección:** `AccountService.get` responde `404 CUENTA_NO_ENCONTRADA` cuando el IBAN no existe. Cubre la consulta de cuenta, el extracto, el cambio de estado, el ingreso y la consulta interna.
+
+**Verificación:** tests automáticos: un IBAN desconocido da 404, un IBAN conocido devuelve la cuenta y una transferencia desde una cuenta inexistente da 404 sin crearse.
+
+**Pendiente:** probar con la API real a través del Gateway.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
