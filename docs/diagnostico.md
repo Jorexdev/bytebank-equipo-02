@@ -77,8 +77,8 @@ Por tanto, aunque los contenedores se creen, el sistema todavía no está operat
 
 ### 4.1. Error en la migración de ms-accounts
 
-**Estado:** reproducido y causa identificada.  
-**Impacto:** bloquea el arranque de `ms-accounts`.
+**Estado:** corregido y verificado en el entorno local.  
+**Impacto:** bloqueaba el arranque de `ms-accounts`.
 
 La migración `V3__accounts_owner_index.sql` intenta crear un índice sobre una columna llamada `owner`:
 
@@ -112,7 +112,15 @@ En el módulo `ms-accounts`:
 
 Los cuatro errores no corresponden a fallos independientes de la lógica de negocio: los tests no llegan a ejecutarla porque el contexto de Spring Boot no consigue inicializarse.
 
-**Pendiente:** acordar y aplicar la corrección de la migración y comprobar que el servicio inicia correctamente y que las pruebas de integración se ejecutan.
+**Corrección aplicada:** la migración crea el índice sobre la columna correcta:
+
+```sql
+CREATE INDEX idx_accounts_owner ON accounts (owner_id);
+```
+
+**Verificación:** con el entorno levantado, Flyway aplica la versión 3 sin errores, `ms-accounts` arranca, la consulta de cuentas responde y las pruebas funcionales del Gateway se ejecutan con normalidad.
+
+**Pendiente:** repetir la ejecución de `LedgerServiceIntegrationTest` y confirmar el resultado en CI.
 
 ### 4.2. Puerto incorrecto en la comunicación entre Gateway y autenticación
 
