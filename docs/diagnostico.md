@@ -164,6 +164,22 @@ Por tanto, el workflow puede aparecer como correcto sin haber ejecutado las prue
 
 **Pendiente:** revisar las pruebas existentes y configurar una CI que ejecute las comprobaciones necesarias y bloquee las integraciones cuando fallen.
 
+### 4.4. BUG-01 — Transferencia con importe negativo
+
+**Estado:** corregido en código, pendiente de probar en el entorno.
+**Impacto:** permite mover dinero en el sentido contrario al esperado.
+
+**Causa:** el importe no se validaba. Restar un negativo suma, y sumar un negativo resta.
+
+**Corrección:**
+
+- `ms-transfers`: `TransferService.create` comprueba `amount.signum() <= 0` y responde 400 con `IMPORTE_NO_VALIDO`.
+- `ms-accounts`: `MovementRequest.amount` lleva `@Positive`, de modo que el endpoint interno también rechaza importes de cero o negativos.
+
+**Verificación:** test automático con -100 €; los 5 tests de transferencias pasan.
+
+**Pendiente:** los saldos ya alterados hay que corregirlos a mano.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:

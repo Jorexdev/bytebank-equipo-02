@@ -40,6 +40,9 @@ public class TransferService {
         if (origin.equals(destination)) {
             throw ApiException.badRequest("MISMA_CUENTA", "La cuenta de origen y la de destino son la misma");
         }
+        if (amount == null || amount.signum() <= 0) {
+            throw ApiException.badRequest("IMPORTE_NO_VALIDO", "El importe debe ser mayor que cero");
+        }
         accountsClient.getAccount(origin);
 
         // TODO validar con ms-fraud antes de ejecutar (ver docs/fraude.md)
