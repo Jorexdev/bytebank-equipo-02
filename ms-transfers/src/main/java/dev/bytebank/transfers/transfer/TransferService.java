@@ -43,7 +43,11 @@ public class TransferService {
         if (amount == null || amount.signum() <= 0) {
             throw ApiException.badRequest("IMPORTE_NO_VALIDO", "El importe debe ser mayor que cero");
         }
-        accountsClient.getAccount(origin);
+        AccountsClient.AccountInfo originAccount = accountsClient.getAccount(origin);
+
+        if (!user.id().equals(originAccount.ownerId())) {
+            throw ApiException.forbidden("No puedes hacer transferencias desde cuentas que no te pertenecen");
+        }
 
         // TODO validar con ms-fraud antes de ejecutar (ver docs/fraude.md)
 

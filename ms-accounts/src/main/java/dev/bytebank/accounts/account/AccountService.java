@@ -36,16 +36,56 @@ public class AccountService {
         return account;
     }
 
+    /**
+     * Lists the accounts accessible to the authenticated user.
+     * Gestors can access all accounts, while clients can only access their own.
+     *
+     * @param user the authenticated user
+     * @return the list of accounts
+     */
     @Transactional(readOnly = true)
-    public List<Account> listOwn(AuthUser user) {
+    public List<Account> listForUser(AuthUser user) {
+        if (user.isGestor()) {
+            return accounts.findAllByOrderByCreatedAtAscIdAsc();
+        }
         return accounts.findByOwnerIdOrderByCreatedAt(user.id());
     }
 
+    /**
+     * Retrieves an account by IBAN without checking user ownership.
+     * Intended for internal operations between microservices.
+     *
+     * @param iban the IBAN of the account
+     * @return the account
+     * @throws ApiException if the account is not found
+     */
     @Transactional(readOnly = true)
     public Account get(String iban) {
         return accounts.findByIban(Iban.normalize(iban))
                 .orElseThrow(() -> ApiException.notFound("CUENTA_NO_ENCONTRADA",
                         "No existe la cuenta " + iban));
+    }
+
+    /**
+     * Retrieves an account by IBAN after checking user ownership.
+     * Gestors can access all accounts, while clients can only access their own.
+     *
+     * @param iban the IBAN of the account
+     * @param user the authenticated user
+     * @return the account
+     * @throws ApiException if the account is not found or the user does not have
+     *                      access
+     */
+    @Transactional(readOnly = true)
+    public Account getForUser(String iban, AuthUser user) {
+        Account account = get(iban);
+
+        if (!user.isGestor() && !account.getOwnerId().equals(user.id())) {
+            throw ApiException.forbidden(
+                    "No puedes consultar una cuenta que no te pertenece");
+        }
+
+        return account;
     }
 
     @Transactional
