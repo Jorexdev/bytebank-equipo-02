@@ -36,12 +36,12 @@ public class LedgerService {
         if (!account.isActive()) {
             throw ApiException.conflict("CUENTA_NO_OPERATIVA", "La cuenta " + account.getIban() + " no está activa");
         }
-        if (account.getBalance() < request.amount()) {
+        if (account.getBalance().compareTo(request.amount()) < 0) {
             throw ApiException.conflict("FONDOS_INSUFICIENTES", "Saldo insuficiente");
         }
         account.debit(request.amount());
         accounts.save(account);
-        Movement movement = movements.save(new Movement(account, request.type(), -request.amount(),
+        Movement movement = movements.save(new Movement(account, request.type(), request.amount().negate(),
                 conceptOrDefault(request.concept()), request.reference()));
         publisher.publish(movement, account);
         log.info("Cargo {} de {} en {}", request.reference(), request.amount(), account.getIban());

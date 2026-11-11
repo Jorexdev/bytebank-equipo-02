@@ -14,6 +14,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 /**
  * Cuentas de demostración (perfil demo). Los titulares son los usuarios del seeder de ms-auth:
  * 2 = ana@bytebank.test y 3 = luis@bytebank.test.
@@ -40,13 +42,13 @@ public class DemoSeeder implements ApplicationRunner {
         if (accounts.count() > 0) {
             return;
         }
-        open(ANA, 2500.00);
-        open(ANA, 150.75);
-        open(LUIS, 800.00);
+        open(ANA, new BigDecimal("2500.00"));
+        open(ANA, new BigDecimal("150.75"));
+        open(LUIS, new BigDecimal("800.00"));
         log.info("Cuentas de demostración creadas");
     }
 
-    private void open(long ownerId, double initialBalance) {
+    private void open(long ownerId, BigDecimal initialBalance) {
         Account account = accounts.save(new Account(Iban.generate(accounts.nextAccountNumber()), ownerId));
         account.credit(initialBalance);
         movements.save(new Movement(account, MovementType.INGRESO, initialBalance, "Saldo inicial", null));

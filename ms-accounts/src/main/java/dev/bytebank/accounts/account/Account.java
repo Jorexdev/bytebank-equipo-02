@@ -9,8 +9,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
+/** Cuenta bancaria. El saldo es BigDecimal con escala 2 (céntimos): nunca double, para evitar errores de coma flotante. */
 @Entity
 @Table(name = "accounts")
 public class Account {
@@ -29,8 +31,8 @@ public class Account {
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
 
-    @Column(nullable = false)
-    private double balance;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal balance;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -42,7 +44,7 @@ public class Account {
         this.iban = iban;
         this.ownerId = ownerId;
         this.status = AccountStatus.ACTIVA;
-        this.balance = 0;
+        this.balance = BigDecimal.ZERO;
         this.createdAt = Instant.now();
     }
 
@@ -50,12 +52,12 @@ public class Account {
         return status == AccountStatus.ACTIVA;
     }
 
-    public void credit(double amount) {
-        balance += amount;
+    public void credit(BigDecimal amount) {
+        balance = balance.add(amount);
     }
 
-    public void debit(double amount) {
-        balance -= amount;
+    public void debit(BigDecimal amount) {
+        balance = balance.subtract(amount);
     }
 
     public void changeStatus(AccountStatus status) {
@@ -78,7 +80,7 @@ public class Account {
         return ownerId;
     }
 
-    public double getBalance() {
+    public BigDecimal getBalance() {
         return balance;
     }
 

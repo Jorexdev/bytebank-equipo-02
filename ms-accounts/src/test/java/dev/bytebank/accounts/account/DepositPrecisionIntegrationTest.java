@@ -7,15 +7,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.math.BigDecimal;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Reproduce la incidencia de contabilidad: dos ingresos de 0,10 € y 0,20 €
- * dejan un saldo de 0,30000000000000004 € porque el saldo se guarda como double
- * (coma flotante binaria). El test fija el valor observado hoy.
+ * Incidencia de contabilidad: dos ingresos de 0,10 € y 0,20 € tenían que dar 0,30 €,
+ * pero con saldos en double daban 0,30000000000000004 €.
  *
- * Cuando el saldo se almacene con precisión decimal (BigDecimal / NUMERIC),
- * el valor esperado es 0,30 y este test debe actualizarse.
+ * Los saldos e importes son BigDecimal con escala 2 (NUMERIC(19,2)). Este test comprueba
+ * el saldo final, cada saldo intermedio y que no aparece el error de coma flotante.
  */
 class DepositPrecisionIntegrationTest extends IntegrationTest {
 
@@ -37,13 +38,24 @@ class DepositPrecisionIntegrationTest extends IntegrationTest {
     }
 
     @Test
-    void dosIngresosDe010Y020DejanSaldoConErrorDeComa() {
-        accountService.deposit(iban, 0.10, "Ingreso 1");
-        accountService.deposit(iban, 0.20, "Ingreso 2");
+    void dosIngresosDe010Y020DanUnSaldoDe030Exacto() {
+        accountService.deposit(iban, new BigDecimal("0.10"), "Ingreso 1");
+        accountService.deposit(iban, new BigDecimal("0.20"), "Ingreso 2");
 
-        double saldo = accounts.findByIban(iban).orElseThrow().getBalance();
+        BigDecimal saldo = accounts.findByIban(iban).orElseThrow().getBalance();
 
-        // Valor observado hoy. Lo esperado por contabilidad es 0.30.
-        assertThat(saldo).isEqualTo(0.30000000000000004);
+        assertThat(saldo.toPlainString()).isEqualTo("0.30");
+        assertThat(saldo).isNotEqualByComparingTo("0.30000000000000004");
+    }
+
+    @Test
+    void saldoTrasCadaIngresoEsExactoEnElExtracto() {
+        accountService.deposit(iban, new BigDecimal("0.10"), "Ingreso 1");
+        accountService.deposit(iban, new BigDecimal("0.20"), "Ingreso 2");
+
+        var saldosTrasMovimiento = jdbc.queryForList(
+                "select balance_after from movements order by id", BigDecimal.class);
+
+        assertThat(saldosTrasMovimiento).containsExactly(new BigDecimal("0.10"), new BigDecimal("0.30"));
     }
 }
