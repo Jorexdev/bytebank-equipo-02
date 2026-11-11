@@ -18,7 +18,7 @@ public class NotificationService {
     @Transactional
     public void notifyOwner(MovementEvent event) {
         notifications.save(new Notification(event.ownerId(), event.movementId(), event.iban(), event.type(),
-                BigDecimal.valueOf(event.amount()), BigDecimal.valueOf(event.balanceAfter()), event.reference(),
+                event.amount(), event.balanceAfter(), event.reference(),
                 NotificationMessages.of(event), event.createdAt()));
     }
 }

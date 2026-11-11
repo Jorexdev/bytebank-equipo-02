@@ -7,6 +7,7 @@ import dev.bytebank.accounts.ledger.LedgerDtos.LedgerResult;
 import dev.bytebank.accounts.ledger.LedgerDtos.MovementRequest;
 import dev.bytebank.accounts.ledger.LedgerService;
 import jakarta.validation.Valid;
+import java.math.BigDecimal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,7 +28,7 @@ public class InternalAccountController {
         this.ledgerService = ledgerService;
     }
 
-    public record InternalAccountResponse(String iban, AccountStatus status, double balance, Long ownerId) {
+    public record InternalAccountResponse(String iban, AccountStatus status, BigDecimal balance, Long ownerId) {
     }
 
     @GetMapping("/{iban}")
