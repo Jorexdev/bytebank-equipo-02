@@ -214,6 +214,50 @@ Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución globa
 
 **Pendiente:** probar con la API real a través del Gateway.
 
+### 4.6. SEG-01 — Acceso no autorizado a cuentas y transferencias
+
+**Estado:** corregido y verificado mediante pruebas automatizadas.  
+**Fecha de corrección:** 11 de noviembre de 2026.
+
+**Problema detectado:**
+
+La auditoría identificó que un cliente podía acceder a información de cuentas y extractos de otros usuarios modificando el IBAN de las peticiones. También podía intentar realizar transferencias desde cuentas de las que no era titular.
+
+Además, el cambio de estado de una cuenta no estaba restringido al rol `GESTOR`.
+
+**Correcciones aplicadas:**
+
+- Se ha incorporado el control de titularidad en las consultas públicas de cuentas y movimientos.
+- Los clientes solo pueden listar y consultar sus propias cuentas.
+- Los gestores pueden consultar todas las cuentas y sus movimientos.
+- El cambio de estado de una cuenta está restringido al rol `GESTOR`.
+- Antes de crear una transferencia, se comprueba que el usuario autenticado sea titular de la cuenta de origen.
+- Se mantiene la separación entre las operaciones públicas y las llamadas internas entre microservicios. Estas últimas continúan protegidas mediante `X-Internal-Key` y el rol `INTERNAL`.
+
+**Pruebas automatizadas:**
+
+Se han ampliado las pruebas de los servicios y se ha incorporado `AccountControllerSecurityTest`, que comprueba los permisos mediante peticiones HTTP con MockMvc.
+
+| Clase de prueba                 | Tests superados |
+| ------------------------------- | --------------: |
+| `AccountServiceTest`            |               7 |
+| `AccountControllerSecurityTest` |               8 |
+| `TransferServiceTest`           |               7 |
+
+Las pruebas verifican tanto los accesos autorizados como los intentos de acceso no permitido.
+
+**Verificación global:**
+
+Se ha ejecutado desde la raíz del proyecto:
+
+```bash
+./mvnw -B -fae verify
+```
+
+Resultado: `BUILD SUCCESS`. Los nueve módulos del proyecto han completado correctamente la compilación y sus pruebas automatizadas.
+
+**Resultado:** la incidencia SEG-01 queda corregida y verificada. Se mantienen las restricciones de acceso por rol y titularidad sin alterar el mecanismo de comunicación interna entre microservicios.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
@@ -291,7 +335,7 @@ Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución genera
 
 Los siguientes puntos requieren una revisión específica:
 
-- **Seguridad:** comprobar la autorización sobre cuentas y movimientos para evitar accesos a recursos de otros usuarios.
+- **Seguridad:** la incidencia SEG-01 relativa al acceso a cuentas, movimientos y transferencias de otros usuarios está corregida y verificada. Queda pendiente continuar revisando otros aspectos, como la gestión de credenciales y secretos.
 - **Credenciales:** revisar que no existan secretos o claves sensibles escritos directamente en el código o en configuraciones versionadas.
 - **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
 - **Concurrencia:** comprobar que las operaciones simultáneas no permitan saldos inconsistentes.
@@ -311,7 +355,7 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
 4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
 5. Investigar el test omitido por la incidencia de zona horaria.
-6. Investigar y documentar las incidencias funcionales y de seguridad.
+6. Continuar investigando y documentando las incidencias funcionales y de seguridad pendientes.
 7. Implementar las funcionalidades pendientes según las tarjetas del backlog.
 8. Actualizar este documento con las correcciones realizadas y las pruebas que acrediten su funcionamiento.
 

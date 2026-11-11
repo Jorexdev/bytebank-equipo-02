@@ -18,6 +18,15 @@ de datos PostgreSQL por servicio.
 
 Más detalle en [docs/arquitectura.md](docs/arquitectura.md).
 
+## Seguridad
+
+La API utiliza autenticación mediante JWT y distingue dos roles:
+
+- **CLIENTE:** puede consultar sus propias cuentas y movimientos, y realizar transferencias únicamente desde cuentas de su titularidad.
+- **GESTOR:** puede consultar todas las cuentas y sus movimientos, y cambiar el estado de las cuentas.
+
+Las operaciones internas entre microservicios utilizan rutas `/internal/**`, protegidas mediante la cabecera `X-Internal-Key` y el rol `INTERNAL`.
+
 ## Stack
 
 Java 17, Spring Boot 3.3, Spring Security con JWT, Spring Data JPA, Flyway, PostgreSQL 15, Spring Cloud Gateway,
