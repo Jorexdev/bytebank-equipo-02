@@ -104,4 +104,29 @@ class TransferServiceTest {
 
         verify(transfers, never()).save(any());
     }
+
+    @Test
+    void cannotTransferFromAnotherUsersAccount() {
+        when(accounts.getAccount(ORIGIN))
+                .thenReturn(new AccountInfo(
+                        ORIGIN,
+                        "ACTIVA",
+                        new BigDecimal("1000"),
+                        99L));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateTransferRequest(
+                        ORIGIN,
+                        DESTINATION,
+                        new BigDecimal("100.00"),
+                        "Transferencia no autorizada"),
+                ANA))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getStatus())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        verify(transfers, never()).save(any());
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
 }

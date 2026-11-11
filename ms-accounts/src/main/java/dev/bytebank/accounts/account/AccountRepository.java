@@ -12,6 +12,8 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     List<Account> findByOwnerIdOrderByCreatedAt(Long ownerId);
 
+    List<Account> findAllByOrderByCreatedAtAscIdAsc();
+
     @Query(value = "select nextval('account_number_seq')", nativeQuery = true)
     long nextAccountNumber();
 }
