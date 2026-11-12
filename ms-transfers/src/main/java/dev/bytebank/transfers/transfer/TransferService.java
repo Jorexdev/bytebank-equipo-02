@@ -51,7 +51,14 @@ public class TransferService {
 
         // TODO validar con ms-fraud antes de ejecutar (ver docs/fraude.md)
 
-        Transfer transfer = transfers.save(new Transfer(origin, destination, amount, request.concept(), user.id()));
+        Transfer transfer = new Transfer(origin, destination, amount, request.concept(), user.id());
+
+        if (isBlockedDestination(destination)) {
+            transfer.reject("CUENTA_NO_OPERATIVA");
+            log.info("Transferencia rechazada antes de ejecutarse: destino no operativo");            return transfers.save(transfer);
+        }
+
+        transfer = transfers.save(transfer);
         try {
             accountsClient.debit(transfer.ledgerReference(), origin, amount, request.concept());
         } catch (ApiException e) {
@@ -65,6 +72,7 @@ public class TransferService {
                 accountsClient.credit(transfer.ledgerReference(), destination, amount, request.concept());
             } catch (ApiException e) {
                 log.warn("No se pudo abonar la transferencia {} en {}: {}", transfer.getId(), destination, e.getCode());
+                reverse(transfer, origin, amount);
                 transfer.reject(e.getCode());
                 return transfers.save(transfer);
             }
@@ -72,6 +80,28 @@ public class TransferService {
         transfer.complete();
         log.info("Transferencia {} completada", transfer.getId());
         return transfers.save(transfer);
+    }
+
+    /**
+     * Checks whether the destination is an account of this bank that cannot receive money.
+     * Checked before debiting the origin so no money moves and no reversal is needed.
+     */
+    private boolean isBlockedDestination(String destination) {
+        return Iban.isOwnBank(destination) && !accountsClient.getAccount(destination).isActive();
+    }
+
+    /**
+     * Returns the money to the origin when crediting the destination has failed.
+     * The reversal is recorded with reference {@code TRF-<id>-REV} so it is traceable in the statement.
+     */
+    private void reverse(Transfer transfer, String origin, BigDecimal amount) {
+        try {
+            accountsClient.credit(transfer.ledgerReference() + "-REV", origin, amount,
+                    "Reverso de la transferencia " + transfer.getId());
+        } catch (ApiException e) {
+            // shortcut: if the reversal also fails it is only logged, for manual review
+            log.error("No se pudo revertir el cargo de la transferencia {}", transfer.getId());
+        }
     }
 
     public Transfer get(Long id, AuthUser user) {
