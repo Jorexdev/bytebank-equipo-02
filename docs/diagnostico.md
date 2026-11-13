@@ -278,6 +278,32 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 - Pruebas automatizadas: destino bloqueado se rechaza sin débito ni abono, y si el abono falla se ejecuta el reverso hacia el origen.
 
 **Pendiente:** el reverso no se puede provocar manualmente con la API actual; su verificación se realiza en la prueba unitaria.
+### 4.7. Extracto: falta un movimiento en cada página
+
+**Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.
+**Impacto:** el extracto se saltaba un movimiento al principio de cada página, así que el cliente nunca veía todos sus movimientos.
+
+**Causa:** `MovementService.statement` calculaba el desplazamiento como `page * size + 1`, suponiendo que `OFFSET` en PostgreSQL empieza en 1. Pero empieza en 0, así que la primera página arrancaba en el segundo movimiento.
+
+**Corrección:** el desplazamiento pasa a ser `page * size`.
+
+**Verificación:** test `firstPageStartsAtOffsetZero` en `MovementServiceTest`.
+
+### 4.8. Extracto: el filtro por fechas no incluye el último día
+
+**Estado:** corregido en código (rama `fix/date-filter-does-not-show-the-most-recent-day`), pendiente de probar en el entorno.
+**Impacto:** al filtrar el extracto con `to`, los movimientos de ese día no aparecían. Además, los límites del rango se calculaban en UTC, de modo que los movimientos hechos entre las 00:00 y las 01:00/02:00 (hora de Madrid) caían en el día anterior.
+
+**Causa:** el fin del rango se calculaba como `to` a las 00:00 UTC y se trataba como exclusivo. El test `filterByDateIncludesLastDay` que lo detectaba estaba deshabilitado (ver 6.2).
+
+**Corrección:**
+
+- `to` pasa a ser inclusivo: el rango termina al inicio del día siguiente.
+- Los límites `from` y `to` se calculan en la zona configurada en `bytebank.zone` (`Europe/Madrid`), no en UTC.
+
+**Verificación:** el test deshabilitado se ha sustituido por `rangeIncludesLastDayInMadridTime`, y se ha añadido `singleDayFilterIncludesTheWholeDay` para comprobar que un único día se incluye completo. `MovementServiceTest`: 4 tests ejecutados, 0 fallos, 0 omitidos.
+
+**Pendiente:** probar con la API real a través del Gateway.
 
 ## 5. Funcionalidades incompletas identificadas
 
@@ -292,6 +318,8 @@ El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las
 | Extractos        | Se han recibido quejas sobre movimientos que no aparecen correctamente.          |
 
 Estas limitaciones están documentadas por el equipo anterior, pero deben verificarse con pruebas durante el desarrollo.
+
+Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.7 y 4.8.
 
 ## 6. Pruebas y cobertura inicial
 
@@ -334,11 +362,9 @@ En `MovementServiceTest` de `ms-accounts` se ha identificado un test deshabilita
 
 - **Test:** `filterByDateIncludesLastDay`.
 - **Motivo indicado en el código:** «Falla en el portátil de Iván por la zona horaria, revisar».
-- **Estado:** pendiente de revisión.
+- **Estado:** resuelto. Ver 4.8.
 
-El test no se ejecuta porque está omitido expresamente. No se ha determinado todavía si el origen del problema está en la implementación, en el propio test o en la configuración de zona horaria del entorno.
-
-No se considera un fallo confirmado de funcionalidad hasta investigar y reproducir el problema.
+El origen estaba en la implementación: el fin del rango era exclusivo y se calculaba en UTC. El test se ha sustituido por `rangeIncludesLastDayInMadridTime`, que se ejecuta y pasa sin depender de la zona horaria de la máquina.
 
 ### 6.3. Resumen de resultados
 
@@ -351,6 +377,8 @@ En los informes de pruebas revisados se han identificado:
 Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución general, aunque no se dispone en este inventario de un recuento individual de sus tests.
 
 **Conclusión:** el principal bloqueo de las pruebas automatizadas se encuentra en `ms-accounts`, debido a la migración V3. También queda pendiente revisar el test de filtrado por fecha que está deshabilitado.
+
+**Actualización:** la migración V3 está corregida (4.1) y el test de filtrado por fecha se ha sustituido por uno que ya no se omite (4.8).
 
 ## 7. Riesgos y aspectos pendientes de investigación
 
@@ -365,7 +393,7 @@ Los siguientes puntos requieren una revisión específica:
 - **Notificaciones:** verificar la persistencia y consulta de avisos, así como su idempotencia.
 - **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.
 - **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
-- **Zonas horarias:** investigar la incidencia del test `filterByDateIncludesLastDay` y comprobar que el tratamiento de fechas sea consistente entre entornos.
+- **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.8). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
 
 Estos puntos son líneas de investigación y no deben considerarse defectos confirmados hasta reproducirlos o verificar su causa.
 
@@ -375,7 +403,7 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
 3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
 4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
-5. Investigar el test omitido por la incidencia de zona horaria.
+5. ~~Investigar el test omitido por la incidencia de zona horaria.~~ Resuelto (4.8).
 6. Continuar investigando y documentando las incidencias funcionales y de seguridad pendientes.
 7. Implementar las funcionalidades pendientes según las tarjetas del backlog.
 8. Actualizar este documento con las correcciones realizadas y las pruebas que acrediten su funcionamiento.
