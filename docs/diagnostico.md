@@ -281,7 +281,7 @@ Resultado: `BUILD SUCCESS`. Los nueve módulos del proyecto han completado corre
 - `to` pasa a ser inclusivo: el rango termina al inicio del día siguiente.
 - Los límites `from` y `to` se calculan en la zona configurada en `bytebank.zone` (`Europe/Madrid`), no en UTC.
 
-**Verificación:** el test deshabilitado se ha sustituido por `rangeIncludesLastDayInMadridTime`. `MovementServiceTest`: 3 tests ejecutados, 0 fallos, 0 omitidos.
+**Verificación:** el test deshabilitado se ha sustituido por `rangeIncludesLastDayInMadridTime`, y se ha añadido `singleDayFilterIncludesTheWholeDay` para comprobar que un único día se incluye completo. `MovementServiceTest`: 4 tests ejecutados, 0 fallos, 0 omitidos.
 
 **Pendiente:** probar con la API real a través del Gateway.
 
