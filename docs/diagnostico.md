@@ -258,6 +258,26 @@ Resultado: `BUILD SUCCESS`. Los nueve módulos del proyecto han completado corre
 
 **Resultado:** la incidencia SEG-01 queda corregida y verificada. Se mantienen las restricciones de acceso por rol y titularidad sin alterar el mecanismo de comunicación interna entre microservicios.
 
+### 4.6. BUG-06 — Transferencia a cuenta bloqueada pierde el dinero
+
+**Estado:** corregido y verificado en el entorno local.  
+**Fecha de corrección:** 12 de noviembre de 2026.
+
+**Problema detectado:**
+
+Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de origen y después intentaba abonar al destino. Como el abono fallaba, la transferencia quedaba rechazada pero el dinero cobrado no se devolvía.
+
+**Correcciones aplicadas:**
+
+- Se comprueba el estado de la cuenta destino **antes** de cobrar al origen. Si no está operativa, la transferencia se rechaza con `CUENTA_NO_OPERATIVA` sin registrar ningún movimiento.
+- Si el abono falla más adelante (por ejemplo, la cuenta se bloquea durante la operación), se devuelve el importe a la cuenta de origen con el concepto "Reverso de la transferencia \<id\>".
+
+**Verificación:**
+
+- Prueba por la API: transferencia de 50 € a una cuenta bloqueada devuelve `RECHAZADA` con `CUENTA_NO_OPERATIVA`; los saldos no cambian y no se registra ningún movimiento.
+- Pruebas automatizadas: destino bloqueado se rechaza sin débito ni abono, y si el abono falla se ejecuta el reverso hacia el origen.
+
+**Pendiente:** el reverso no se puede provocar manualmente con la API actual; su verificación se realiza en la prueba unitaria.
 ### 4.7. Extracto: falta un movimiento en cada página
 
 **Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.

@@ -46,6 +46,7 @@ class TransferServiceTest {
     void setUp() {
         lenient().when(transfers.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(accounts.getAccount(ORIGIN)).thenReturn(new AccountInfo(ORIGIN, "ACTIVA", new BigDecimal("1000"), 2L));
+        lenient().when(accounts.getAccount(DESTINATION)).thenReturn(new AccountInfo(DESTINATION, "ACTIVA", new BigDecimal("100"), 3L));
     }
 
     @Test
@@ -66,14 +67,27 @@ class TransferServiceTest {
     }
 
     @Test
-    void transferToBlockedAccountIsRejected() {
+    void transferToBlockedAccountIsRejectedWithoutMovingMoney() {
+        when(accounts.getAccount(DESTINATION)).thenReturn(new AccountInfo(DESTINATION, "BLOQUEADA", new BigDecimal("100"), 3L));
+
+        Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("50.00"), null), ANA);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.RECHAZADA);
+        assertThat(t.getRejectionReason()).isEqualTo("CUENTA_NO_OPERATIVA");
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void moneyIsReturnedToOriginWhenCreditFails() {
         when(accounts.credit(anyString(), eq(DESTINATION), any(), any()))
                 .thenThrow(new ApiException(HttpStatus.CONFLICT, "CUENTA_NO_OPERATIVA", "La cuenta no está activa"));
 
         Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("50.00"), null), ANA);
 
         assertThat(t.getStatus()).isEqualTo(TransferStatus.RECHAZADA);
-        assertThat(t.getRejectionReason()).isEqualTo("CUENTA_NO_OPERATIVA");
+        // el reverso devuelve el dinero al IBAN de origen
+        verify(accounts).credit(anyString(), eq(ORIGIN), eq(new BigDecimal("50.00")), anyString());
     }
 
     @Test
