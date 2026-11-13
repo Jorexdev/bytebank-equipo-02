@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
@@ -69,5 +70,18 @@ class MovementServiceTest {
 
         verify(movements).findSlice(eq(1L), any(), any(), eq(10), eq(0));
         verify(movements).findSlice(eq(1L), any(), any(), eq(10), eq(20));
+    }
+
+    @Test
+    void firstPageStartsAtOffsetZero() {
+        Account account = mock(Account.class);
+        when(account.getId()).thenReturn(1L);
+        when(movements.countInRange(anyLong(), any(), any())).thenReturn(25L);
+
+        service.statement(account, null, null, 0, 10);
+        service.statement(account, null, null, 2, 10);
+
+        Mockito.verify(movements).findSlice(eq(1L), any(), any(), eq(10), eq(0));
+        Mockito.verify(movements).findSlice(eq(1L), any(), any(), eq(10), eq(20));
     }
 }
