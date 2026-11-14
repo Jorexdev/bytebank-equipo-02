@@ -64,7 +64,7 @@ public class LedgerService {
     }
 
     private Account find(String iban) {
-        return accounts.findByIban(Iban.normalize(iban))
+        return accounts.findByIbanForUpdate(Iban.normalize(iban))
                 .orElseThrow(() -> ApiException.notFound("CUENTA_NO_ENCONTRADA", "No existe la cuenta " + iban));
     }
 
