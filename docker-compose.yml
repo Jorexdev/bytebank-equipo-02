@@ -8,6 +8,7 @@ x-common-env: &common-env
   SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
   DB_USER: ${POSTGRES_USER:-bytebank}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+  JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en .env}
   INTERNAL_KEY: ${INTERNAL_KEY:?Falta INTERNAL_KEY en .env}
   AUTH_URL: http://ms-auth:8081
   ACCOUNTS_URL: http://ms-accounts:8082

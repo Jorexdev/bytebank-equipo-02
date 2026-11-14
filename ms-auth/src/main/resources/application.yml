@@ -16,6 +16,9 @@ spring:
       hibernate.jdbc.time_zone: UTC
 
 bytebank:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
   internal-key: ${INTERNAL_KEY}
   security:
     public-paths:

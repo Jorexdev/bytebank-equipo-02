@@ -16,6 +16,8 @@ spring:
       hibernate.jdbc.time_zone: UTC
 
 bytebank:
+  jwt:
+    secret: ${JWT_SECRET}
   internal-key: ${INTERNAL_KEY}
   fraud:
     block-threshold: 20000.00
