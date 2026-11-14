@@ -363,12 +363,12 @@ No se ha reescrito el historial de git. Reescribirlo obligaría a forzar el push
 
 | Clase de prueba | Módulo | Tests | Qué comprueba |
 | --- | --- | ---: | --- |
-| `JwtVerifierTest` | `common` | 5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con el secreto antiguo, los manipulados, los caducados y el texto que no es un token |
+| `JwtVerifierTest` | `common` | 5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con cualquier otro secreto, los manipulados, los caducados y el texto que no es un token |
 | `BytebankPropertiesTest` | `common` | 6 | La configuración se rechaza si el secreto es corto, está en blanco o falta, o si falta la clave interna |
 | `JwtIssuerTest` | `ms-auth` | 4 | El token emitido se valida con el mismo secreto y se rechaza con otro. Caducidad de 60 minutos por defecto |
 | `AuthDtosTest` | `ms-auth` | 3 | El `toString()` de los DTOs no muestra la contraseña |
 
-`JwtVerifierTest` conserva el secreto antiguo en una constante para comprobar que se rechaza. Es la única aparición que queda en el repositorio.
+El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los tests: para comprobar que una firma incorrecta se rechaza basta con usar cualquier secreto distinto del configurado.
 
 **Verificación:**
 

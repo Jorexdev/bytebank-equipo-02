@@ -16,11 +16,8 @@ class JwtVerifierTest {
 
     private static final String SECRET = "secreto-jwt-solo-para-tests-0123456789abcdef";
 
-    /**
-     * Secreto que estuvo escrito en SecurityConstants (SEG-02). Es público y ningún entorno lo usa ya:
-     * se conserva solo para comprobar que los tokens firmados con él se rechazan.
-     */
-    private static final String LEAKED_SECRET = "bytebank-secret-key-que-nadie-va-a-adivinar-2024";
+    /** Cualquier secreto distinto del configurado: quien no conoce el secreto real no puede firmar tokens válidos. */
+    private static final String OTHER_SECRET = "otro-secreto-distinto-para-tests-9876543210";
 
     private final JwtVerifier verifier = new JwtVerifier(
             new BytebankProperties(new BytebankProperties.Jwt(SECRET, null), "clave-interna-de-test", null));
@@ -34,8 +31,8 @@ class JwtVerifierTest {
     }
 
     @Test
-    void rejectsTokenSignedWithTheLeakedSecret() {
-        String forged = token(LEAKED_SECRET, "GESTOR", Instant.now().plus(1, ChronoUnit.HOURS));
+    void rejectsTokenSignedWithAnotherSecret() {
+        String forged = token(OTHER_SECRET, "GESTOR", Instant.now().plus(1, ChronoUnit.HOURS));
 
         assertThat(verifier.verify(forged)).isEmpty();
     }
@@ -43,7 +40,7 @@ class JwtVerifierTest {
     @Test
     void rejectsTokenWhosePayloadHasBeenTampered() {
         String cliente = token(SECRET, "CLIENTE", Instant.now().plus(1, ChronoUnit.HOURS));
-        String gestor = token(LEAKED_SECRET, "GESTOR", Instant.now().plus(1, ChronoUnit.HOURS));
+        String gestor = token(OTHER_SECRET, "GESTOR", Instant.now().plus(1, ChronoUnit.HOURS));
         // Cabecera y firma del token legítimo, con el contenido de otro que dice ser GESTOR.
         String[] valid = cliente.split("\\.");
         String tampered = valid[0] + "." + gestor.split("\\.")[1] + "." + valid[2];
