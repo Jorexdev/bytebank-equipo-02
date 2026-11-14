@@ -6,6 +6,7 @@ import org.springframework.validation.annotation.Validated;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -25,8 +26,9 @@ public record BytebankProperties(@Valid @NotNull Jwt jwt, @NotBlank String inter
     }
 
     public record Jwt(
+            
             @NotBlank @Size(min = 32, message = "el secreto JWT debe tener al menos 32 caracteres") String secret,
-            Long expirationMinutes) {
+            @Positive(message = "la duración del JWT debe ser mayor que cero") Long expirationMinutes) {
 
         public long expirationMinutesOrDefault() {
             return expirationMinutes == null ? 60 : expirationMinutes;

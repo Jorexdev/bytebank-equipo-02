@@ -57,6 +57,20 @@ class BytebankPropertiesTest {
         assertThat(new BytebankProperties.Jwt(SECRET, 15L).expirationMinutesOrDefault()).isEqualTo(15);
     }
 
+    @Test
+    void rejectsZeroExpirationMinutes() {
+        assertThat(validate(new BytebankProperties.Jwt(SECRET, 0L), "clave-interna"))
+                .extracting(ConstraintViolation::getMessage)
+                .containsExactly("la duración del JWT debe ser mayor que cero");
+    }
+
+    @Test
+    void rejectsNegativeExpirationMinutes() {
+        assertThat(validate(new BytebankProperties.Jwt(SECRET, -1L), "clave-interna"))
+                .extracting(ConstraintViolation::getMessage)
+                .containsExactly("la duración del JWT debe ser mayor que cero");
+    }
+
     private static Set<ConstraintViolation<BytebankProperties>> validate(BytebankProperties.Jwt jwt, String internalKey) {
         return VALIDATOR.validate(new BytebankProperties(jwt, internalKey, null));
     }
