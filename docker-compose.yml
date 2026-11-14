@@ -5,7 +5,7 @@ x-service: &service
       condition: service_healthy
 
 x-common-env: &common-env
-  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
   DB_USER: ${POSTGRES_USER:-bytebank}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
   JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en .env}
