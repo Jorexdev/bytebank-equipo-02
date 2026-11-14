@@ -305,6 +305,20 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** probar con la API real a través del Gateway.
 
+### 4.9. CON-01 — Transferencias simultáneas gastan más que el saldo
+
+**Estado:** corregido y verificado en el entorno local.
+**Impacto:** un cliente con 100 € lanzó varias transferencias de 30 € a la vez y se ejecutaron todas, dejando la cuenta sin fondos suficientes para cubrirlas.
+
+**Causa:** al cobrar o abonar, `LedgerService` leía el saldo sin bloquear la cuenta. Varias peticiones simultáneas veían el mismo importe, pasaban la comprobación y escribían su propio resultado, pisándose unas a otras.
+
+**Corrección:** la cuenta se bloquea mientras se hace el cargo o el abono (`SELECT ... FOR UPDATE`). Las operaciones sobre la misma cuenta se atienden de una en una, así que cada una ve el saldo actualizado y la que no tiene fondos se rechaza con `FONDOS_INSUFICIENTES`.
+
+**Verificación:**
+
+- Prueba por la API: cuenta con 100 € y 4 transferencias de 30 € lanzadas a la vez. Resultado: 3 `COMPLETADA`, 1 `RECHAZADA` con `FONDOS_INSUFICIENTES`; saldo final 10 € y solo 3 movimientos.
+- Test de integración: el mismo caso con 4 débitos simultáneos. Sin el bloqueo el test falla porque pasan los 4.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
