@@ -278,6 +278,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 - Pruebas automatizadas: destino bloqueado se rechaza sin débito ni abono, y si el abono falla se ejecuta el reverso hacia el origen.
 
 **Pendiente:** el reverso no se puede provocar manualmente con la API actual; su verificación se realiza en la prueba unitaria.
+
 ### 4.7. Extracto: falta un movimiento en cada página
 
 **Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.
@@ -304,6 +305,83 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 **Verificación:** el test deshabilitado se ha sustituido por `rangeIncludesLastDayInMadridTime`, y se ha añadido `singleDayFilterIncludesTheWholeDay` para comprobar que un único día se incluye completo. `MovementServiceTest`: 4 tests ejecutados, 0 fallos, 0 omitidos.
 
 **Pendiente:** probar con la API real a través del Gateway.
+
+### 4.9. SEG-02 — Secretos en el repositorio
+
+**Estado:** corregido y verificado mediante pruebas automatizadas y pruebas por la API.  
+**Fecha de corrección:** 14 de noviembre de 2026.
+
+**Problema detectado:**
+
+La auditoría indicaba que había credenciales escritas en el código. Se ha revisado el repositorio completo (código, configuración, Docker, CI e historial de git) y se han encontrado dos fallos:
+
+1. **El secreto con el que se firman los JWT estaba escrito en el código**, en la clase `SecurityConstants` del módulo `common`. ms-auth firma los tokens con él y el resto de servicios los valida con él.
+2. **La contraseña de los usuarios se escribía en claro en los logs de ms-auth.** `AuthService.login` registraba el objeto `LoginRequest` completo, y el `toString()` que Java genera para un `record` incluye todos sus campos.
+
+**Impacto:**
+
+- Con el secreto JWT, cualquier persona con acceso al repositorio, a un JAR o a una imagen Docker podía fabricar un token válido con el usuario y el rol que quisiera, incluido `GESTOR`. Esto anulaba toda la autenticación y también los controles de titularidad de SEG-01.
+- El secreto era el mismo en todos los entornos y no se podía cambiar sin recompilar.
+- Los logs guardaban la contraseña de cada intento de login, también de los fallidos.
+
+**Origen:**
+
+Los dos fallos entraron en commits del equipo anterior, en junio de 2026:
+
+- `a25881d` «Constantes de seguridad compartidas entre servicios»: hasta ese commit el secreto se leía de la variable de entorno `JWT_SECRET`. El commit la eliminó de la configuración y del `docker-compose.yml`, y fijó además la caducidad del token en 24 horas (antes era de 60 minutos y configurable).
+- `9d62626` «Log de intentos de login»: añadió la línea de log con el `LoginRequest` completo.
+
+**Resultado de la auditoría:**
+
+| Hallazgo | ¿Es un secreto? | Decisión |
+| --- | --- | --- |
+| `JWT_SECRET` en `SecurityConstants` | Sí | Corregido |
+| Contraseña en claro en el log de login | Sí (dato del usuario) | Corregido |
+| Contraseñas de los usuarios de demostración (`DemoSeeder`, README) | No: datos de prueba del perfil `demo`, documentados a propósito | No se cambian. Se corrige la activación por defecto del perfil |
+| Clave interna y secreto JWT de los tests | No: solo existen en los tests | Sin cambios |
+| Valores de `.env.example` | No: marcadores de relleno | Sin cambios |
+| `DB_PASSWORD` e `INTERNAL_KEY` | Sí, pero ya llegaban por variable de entorno | Correcto, sin cambios |
+| Fichero `.env` | Sí, pero está en `.gitignore` y nunca se ha subido | Correcto, sin cambios |
+| Workflow de CI | No contiene secretos | Sin cambios |
+
+**Correcciones aplicadas:**
+
+- Se ha eliminado `SecurityConstants`. El secreto se lee de `bytebank.jwt.secret`, que toma su valor de la variable de entorno `JWT_SECRET`, sin valor por defecto.
+- `BytebankProperties` valida la configuración al arrancar: si el secreto falta o tiene menos de 32 caracteres, el servicio no arranca.
+- La caducidad del token vuelve a ser configurable (`JWT_EXPIRATION_MINUTES`) y de 60 minutos por defecto.
+- `docker-compose.yml` exige `JWT_SECRET` y `.env.example` explica cómo generarlo.
+- `AuthService.login` registra solo el email. Además, `LoginRequest` y `RegisterRequest` sobrescriben `toString()` para no mostrar nunca la contraseña, aunque alguien vuelva a registrar el objeto completo.
+- El perfil `demo` ya no se activa por defecto en `docker-compose.yml`: hay que pedirlo en el `.env`.
+
+**Rotación del secreto:**
+
+El secreto antiguo debe considerarse comprometido, porque sigue en el historial de git de todas las ramas. Por eso no se ha reutilizado: cada entorno genera uno nuevo y aleatorio, que vive solo en su `.env`. Los tokens firmados con el secreto antiguo dejan de ser válidos.
+
+No se ha reescrito el historial de git. Reescribirlo obligaría a forzar el push sobre las ramas compartidas y rompería el trabajo en curso del equipo, sin eliminar las copias que ya existen. Una vez rotado, el secreto antiguo no da acceso a nada.
+
+**Pruebas automatizadas:**
+
+| Clase de prueba | Módulo | Tests | Qué comprueba |
+| --- | --- | ---: | --- |
+| `JwtVerifierTest` | `common` | 5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con el secreto antiguo, los manipulados, los caducados y el texto que no es un token |
+| `BytebankPropertiesTest` | `common` | 6 | La configuración se rechaza si el secreto es corto, está en blanco o falta, o si falta la clave interna |
+| `JwtIssuerTest` | `ms-auth` | 4 | El token emitido se valida con el mismo secreto y se rechaza con otro. Caducidad de 60 minutos por defecto |
+| `AuthDtosTest` | `ms-auth` | 3 | El `toString()` de los DTOs no muestra la contraseña |
+
+`JwtVerifierTest` conserva el secreto antiguo en una constante para comprobar que se rechaza. Es la única aparición que queda en el repositorio.
+
+**Verificación:**
+
+- `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 60 tests, 0 fallos.
+- Sin `JWT_SECRET`, `docker compose` no arranca y muestra «Falta JWT_SECRET en .env».
+- Sin `SPRING_PROFILES_ACTIVE`, los servicios reciben el perfil `default` y no se crean datos de demostración.
+- Por la API, a través del Gateway: el login devuelve `expiresInSeconds: 3600` y `GET /api/accounts` responde con el token emitido.
+
+**Pendiente:**
+
+- Cada miembro del equipo debe añadir `JWT_SECRET` a su `.env` para poder arrancar el proyecto.
+- En un entorno real habría que purgar los logs anteriores de ms-auth y pedir a los usuarios afectados que cambien su contraseña.
+- Ver en la sección 7 el riesgo sobre el alta de gestores.
 
 ## 5. Funcionalidades incompletas identificadas
 
@@ -384,8 +462,10 @@ Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución genera
 
 Los siguientes puntos requieren una revisión específica:
 
-- **Seguridad:** la incidencia SEG-01 relativa al acceso a cuentas, movimientos y transferencias de otros usuarios está corregida y verificada. Queda pendiente continuar revisando otros aspectos, como la gestión de credenciales y secretos.
-- **Credenciales:** revisar que no existan secretos o claves sensibles escritos directamente en el código o en configuraciones versionadas.
+- **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
+- **Credenciales:** revisado en SEG-02 (4.9). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
+- **Alta de gestores:** el único sitio del código que crea un usuario con rol `GESTOR` es el seeder del perfil `demo`, que usa una contraseña pública. El registro crea siempre usuarios `CLIENTE` y no existe ningún endpoint para dar de alta gestores. Si un entorno con datos reales se inicializara con el perfil `demo`, quedaría un gestor con contraseña conocida y acceso a todas las cuentas. En SEG-02 se ha evitado que el perfil se active por defecto, pero falta un mecanismo de alta de gestores que no dependa de la demo.
+- **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
 - **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
 - **Concurrencia:** comprobar que las operaciones simultáneas no permitan saldos inconsistentes.
 - **Antifraude:** revisar la integración con `ms-fraud`, las reglas de validación y el comportamiento ante errores o falta de respuesta.
