@@ -305,6 +305,27 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** probar con la API real a través del Gateway.
 
+### 4.9. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
+
+**Estado:** implementado y verificado en el entorno local.
+
+**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
+
+**Cambios aplicados:**
+
+- Nuevo estado `PENDIENTE` para la transferencia.
+- Al crear una transferencia de más de 5.000 € se guarda como pendiente y no se llama a ms-accounts.
+- Nuevos endpoints `POST /api/transfers/{id}/approve` y `POST /api/transfers/{id}/reject`, solo para el rol `GESTOR`.
+- Aprobar ejecuta el mismo flujo que una transferencia normal, incluida la comprobación de destino y el reverso de BUG-06. Rechazar deja el motivo `RECHAZADA_POR_GESTOR`.
+- El cambio de estado es condicional: si dos gestores actúan a la vez, solo el primero lo consigue.
+
+**Verificación:**
+
+- Tests automáticos: 14 en `TransferServiceTest`.
+- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
+
+**Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:

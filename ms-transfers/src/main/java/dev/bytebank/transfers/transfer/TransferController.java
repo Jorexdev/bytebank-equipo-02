@@ -43,4 +43,18 @@ public class TransferController {
     public TransferResponse get(@PathVariable Long id) {
         return TransferResponse.from(transferService.get(id, CurrentUser.get()));
     }
+
+    /** Approves a pending transfer. Only gestors can do it. */
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasRole('GESTOR')")
+    public TransferResponse approve(@PathVariable Long id) {
+        return TransferResponse.from(transferService.approve(id));
+    }
+
+    /** Rejects a pending transfer. Only gestors can do it. */
+    @PostMapping("/{id}/reject")
+    @PreAuthorize("hasRole('GESTOR')")
+    public TransferResponse reject(@PathVariable Long id) {
+        return TransferResponse.from(transferService.reject(id));
+    }
 }

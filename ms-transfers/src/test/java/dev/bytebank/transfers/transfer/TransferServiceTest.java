@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -142,5 +143,89 @@ class TransferServiceTest {
         verify(transfers, never()).save(any());
         verify(accounts, never()).debit(anyString(), anyString(), any(), any());
         verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void transfersOver5000ArePendingWithoutMovingMoney() {
+        Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("6000.00"), null), ANA);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.PENDIENTE);
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void approveExecutesPendingTransfer() {
+        Transfer pending = pendingTransfer();
+        when(transfers.findById(7L)).thenReturn(Optional.of(pending));
+        when(transfers.updateStatusIfPending(7L, TransferStatus.COMPLETADA)).thenReturn(1);
+
+        Transfer t = service.approve(7L);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.COMPLETADA);
+        verify(accounts).debit(anyString(), eq(ORIGIN), eq(new BigDecimal("6000.00")), any());
+        verify(accounts).credit(anyString(), eq(DESTINATION), eq(new BigDecimal("6000.00")), any());
+    }
+
+    @Test
+    void rejectMarksPendingTransferAsRejectedWithoutMovingMoney() {
+        Transfer pending = pendingTransfer();
+        when(transfers.findById(7L)).thenReturn(Optional.of(pending));
+        when(transfers.updateStatusIfPending(7L, TransferStatus.RECHAZADA)).thenReturn(1);
+
+        Transfer t = service.reject(7L);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.RECHAZADA);
+        assertThat(t.getRejectionReason()).isEqualTo("RECHAZADA_POR_GESTOR");
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void approveOnlyAcceptsPendingTransfers() {
+        Transfer completed = new Transfer(ORIGIN, DESTINATION, new BigDecimal("6000.00"), null, 2L);
+        when(transfers.findById(7L)).thenReturn(Optional.of(completed));
+
+        assertThatThrownBy(() -> service.approve(7L))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getCode())
+                .isEqualTo("TRANSFERENCIA_NO_PENDIENTE");
+
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void approveFailsWhenAnotherGestorAlreadyClaimedIt() {
+        Transfer pending = pendingTransfer();
+        when(transfers.findById(7L)).thenReturn(Optional.of(pending));
+        when(transfers.updateStatusIfPending(7L, TransferStatus.COMPLETADA)).thenReturn(0);
+
+        assertThatThrownBy(() -> service.approve(7L))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getCode())
+                .isEqualTo("TRANSFERENCIA_NO_PENDIENTE");
+
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void approvedTransferIsRejectedWhenDebitFails() {
+        Transfer pending = pendingTransfer();
+        when(transfers.findById(7L)).thenReturn(Optional.of(pending));
+        when(transfers.updateStatusIfPending(7L, TransferStatus.COMPLETADA)).thenReturn(1);
+        when(accounts.debit(anyString(), eq(ORIGIN), any(), any()))
+                .thenThrow(new ApiException(HttpStatus.CONFLICT, "FONDOS_INSUFICIENTES", "Saldo insuficiente"));
+
+        Transfer t = service.approve(7L);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.RECHAZADA);
+        assertThat(t.getRejectionReason()).isEqualTo("FONDOS_INSUFICIENTES");
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    private static Transfer pendingTransfer() {
+        Transfer transfer = new Transfer(ORIGIN, DESTINATION, new BigDecimal("6000.00"), "Coche", 2L);
+        transfer.pending();
+        return transfer;
     }
 }
