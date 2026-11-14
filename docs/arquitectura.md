@@ -56,9 +56,10 @@ Todos los servicios devuelven los errores así:
 
 1. El cliente hace `POST /api/transfers` con origen, destino, importe y concepto.
 2. ms-transfers comprueba los datos y registra la transferencia.
-3. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
-4. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
-5. La transferencia queda `COMPLETADA` o `RECHAZADA` con el código del error.
+3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza.
+4. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
+5. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
+6. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
 
 Las transferencias a otras entidades solo cargan en origen: la liquidación con el otro banco queda fuera de este sistema.
 
@@ -67,4 +68,4 @@ Las transferencias a otras entidades solo cargan en origen: la liquidación con 
 | Rol | Puede |
 |---|---|
 | CLIENTE | Abrir cuentas, ver las suyas, hacer transferencias desde ellas, gestionar sus tarjetas |
-| GESTOR | Todo lo de consulta, bloquear y desbloquear cuentas, hacer ingresos en ventanilla, ver las validaciones antifraude |
+| GESTOR | Todo lo de consulta, bloquear y desbloquear cuentas, hacer ingresos en ventanilla, aprobar o rechazar transferencias pendientes, ver las validaciones antifraude |
