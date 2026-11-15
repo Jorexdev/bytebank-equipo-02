@@ -374,6 +374,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 - `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 62 tests, 0 fallos.
 - Sin `JWT_SECRET`, `docker compose` no arranca y muestra «Falta JWT_SECRET en .env».
+- Sin `JWT_EXPIRATION_MINUTES`, los servicios reciben el valor por defecto de 60 minutos.
 - Sin `SPRING_PROFILES_ACTIVE`, los servicios reciben el perfil `default` y no se crean datos de demostración.
 - Por la API, a través del Gateway: el login devuelve `expiresInSeconds: 3600` y `GET /api/accounts` responde con el token emitido.
 
