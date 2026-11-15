@@ -39,8 +39,30 @@ public class TransferController {
         return transferService.list(page, size, CurrentUser.get());
     }
 
+    /** Lists the transfers pending approval. Only gestors can do it. */
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('GESTOR')")
+    public PageResponse<TransferResponse> pending(@RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return transferService.listPending(page, size);
+    }
+
     @GetMapping("/{id}")
     public TransferResponse get(@PathVariable Long id) {
         return TransferResponse.from(transferService.get(id, CurrentUser.get()));
+    }
+
+    /** Approves a pending transfer. Only gestors can do it. */
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasRole('GESTOR')")
+    public TransferResponse approve(@PathVariable Long id) {
+        return TransferResponse.from(transferService.approve(id));
+    }
+
+    /** Rejects a pending transfer. Only gestors can do it. */
+    @PostMapping("/{id}/reject")
+    @PreAuthorize("hasRole('GESTOR')")
+    public TransferResponse reject(@PathVariable Long id) {
+        return TransferResponse.from(transferService.reject(id));
     }
 }

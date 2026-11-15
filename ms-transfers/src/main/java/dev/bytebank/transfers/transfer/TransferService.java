@@ -20,6 +20,7 @@ public class TransferService {
 
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+    private static final BigDecimal PENDING_THRESHOLD = new BigDecimal("5000");
 
     private final TransferRepository transfers;
     private final AccountsClient accountsClient;
@@ -53,14 +54,47 @@ public class TransferService {
 
         Transfer transfer = new Transfer(origin, destination, amount, request.concept(), user.id());
 
+        if (amount.compareTo(PENDING_THRESHOLD) > 0) {
+            transfer.pending();
+            return transfers.save(transfer);
+        }
+        return execute(transfer);
+    }
+
+    /** Approves a pending transfer and moves the money. Only gestors can do it. */
+    public Transfer approve(Long id) {
+        Transfer transfer = findPending(id);
+        if (transfers.updateStatusIfPending(id, TransferStatus.COMPLETADA) == 0) {
+            throw notPending();
+        }
+        transfer.complete();
+        return execute(transfer);
+    }
+
+    /** Rejects a pending transfer without moving money. Only gestors can do it. */
+    public Transfer reject(Long id) {
+        Transfer transfer = findPending(id);
+        if (transfers.updateStatusIfPending(id, TransferStatus.RECHAZADA) == 0) {
+            throw notPending();
+        }
+        transfer.reject("RECHAZADA_POR_GESTOR");
+        return transfers.save(transfer);
+    }
+
+    private Transfer execute(Transfer transfer) {
+        String origin = transfer.getOriginIban();
+        String destination = transfer.getDestinationIban();
+        BigDecimal amount = transfer.getAmount();
+
         if (isBlockedDestination(destination)) {
             transfer.reject("CUENTA_NO_OPERATIVA");
-            log.info("Transferencia rechazada antes de ejecutarse: destino no operativo");            return transfers.save(transfer);
+            log.info("Transferencia rechazada antes de ejecutarse: destino no operativo");
+            return transfers.save(transfer);
         }
 
         transfer = transfers.save(transfer);
         try {
-            accountsClient.debit(transfer.ledgerReference(), origin, amount, request.concept());
+            accountsClient.debit(transfer.ledgerReference(), origin, amount, transfer.getConcept());
         } catch (ApiException e) {
             transfer.reject(e.getCode());
             log.info("Transferencia {} rechazada: {}", transfer.getId(), e.getCode());
@@ -69,7 +103,7 @@ public class TransferService {
 
         if (Iban.isOwnBank(destination)) {
             try {
-                accountsClient.credit(transfer.ledgerReference(), destination, amount, request.concept());
+                accountsClient.credit(transfer.ledgerReference(), destination, amount, transfer.getConcept());
             } catch (ApiException e) {
                 log.warn("No se pudo abonar la transferencia {} en {}: {}", transfer.getId(), destination, e.getCode());
                 reverse(transfer, origin, amount);
@@ -80,6 +114,19 @@ public class TransferService {
         transfer.complete();
         log.info("Transferencia {} completada", transfer.getId());
         return transfers.save(transfer);
+    }
+
+    private Transfer findPending(Long id) {
+        Transfer transfer = transfers.findById(id)
+                .orElseThrow(() -> ApiException.notFound("TRANSFERENCIA_NO_ENCONTRADA", "No existe la transferencia " + id));
+        if (transfer.getStatus() != TransferStatus.PENDIENTE) {
+            throw notPending();
+        }
+        return transfer;
+    }
+
+    private static ApiException notPending() {
+        return ApiException.conflict("TRANSFERENCIA_NO_PENDIENTE", "La transferencia no está pendiente de revisión");
     }
 
     /**
@@ -107,7 +154,7 @@ public class TransferService {
     public Transfer get(Long id, AuthUser user) {
         Transfer transfer = transfers.findById(id)
                 .orElseThrow(() -> ApiException.notFound("TRANSFERENCIA_NO_ENCONTRADA", "No existe la transferencia " + id));
-        if (!transfer.getCreatedBy().equals(user.id())) {
+       if (!user.isGestor() && !transfer.getCreatedBy().equals(user.id())) {
             throw ApiException.forbidden("No puedes ver esta transferencia");
         }
         return transfer;
@@ -115,6 +162,12 @@ public class TransferService {
 
     public PageResponse<TransferResponse> list(int page, int size, AuthUser user) {
         var result = transfers.findByCreatedBy(user.id(), PageRequest.of(page, size, NEWEST_FIRST));
+        return PageResponse.of(result, TransferResponse::from);
+    }
+
+    /** Transfers waiting for a gestor's decision. Only gestors can list them. */
+    public PageResponse<TransferResponse> listPending(int page, int size) {
+        var result = transfers.findByStatus(TransferStatus.PENDIENTE, PageRequest.of(page, size, NEWEST_FIRST));
         return PageResponse.of(result, TransferResponse::from);
     }
 }
