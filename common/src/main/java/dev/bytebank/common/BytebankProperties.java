@@ -26,7 +26,6 @@ public record BytebankProperties(@Valid @NotNull Jwt jwt, @NotBlank String inter
     }
 
     public record Jwt(
-            
             @NotBlank @Size(min = 32, message = "el secreto JWT debe tener al menos 32 caracteres") String secret,
             @Positive(message = "la duración del JWT debe ser mayor que cero") Long expirationMinutes) {
 

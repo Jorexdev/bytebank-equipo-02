@@ -413,8 +413,9 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Verificación:**
 
-- `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 62 tests, 0 fallos.
+- `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 73 tests, 0 fallos.
 - Sin `JWT_SECRET`, `docker compose` no arranca y muestra «Falta JWT_SECRET en .env».
+- Con `JWT_SECRET=corto`, ms-auth no arranca y muestra «el secreto JWT debe tener al menos 32 caracteres».
 - Sin `JWT_EXPIRATION_MINUTES`, los servicios reciben el valor por defecto de 60 minutos.
 - Sin `SPRING_PROFILES_ACTIVE`, los servicios reciben el perfil `default` y no se crean datos de demostración.
 - Por la API, a través del Gateway: el login devuelve `expiresInSeconds: 3600` y `GET /api/accounts` responde con el token emitido.
@@ -424,6 +425,8 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Cada miembro del equipo debe añadir `JWT_SECRET` a su `.env` para poder arrancar el proyecto.
 - En un entorno real habría que purgar los logs anteriores de ms-auth y pedir a los usuarios afectados que cambien su contraseña.
 - Ver en la sección 7 el riesgo sobre el alta de gestores.
+- El valor de ejemplo de `JWT_SECRET` en `.env.example` supera los 32 caracteres, así que el sistema arranca aunque no se cambie. Es cómodo para la demo, pero quien no lo sustituya funciona con un secreto público.
+- Cuando la validación rechaza un secreto, Spring escribe el valor rechazado en el log de arranque. Un secreto real demasiado corto quedaría registrado.
 
 ## 5. Funcionalidades incompletas identificadas
 
