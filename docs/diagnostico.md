@@ -305,7 +305,25 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** probar con la API real a través del Gateway.
 
-### 4.9. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
+### 4.9. CON-01 — Transferencias simultáneas gastan más que el saldo
+
+**Estado:** corregido y verificado en el entorno local.
+**Impacto:** un cliente con 100 € lanzó varias transferencias de 30 € a la vez y se ejecutaron todas, dejando la cuenta sin fondos suficientes para cubrirlas.
+
+**Causa:** al cobrar o abonar, `LedgerService` leía el saldo sin bloquear la cuenta. Varias peticiones simultáneas veían el mismo importe, pasaban la comprobación y escribían su propio resultado, pisándose unas a otras.
+
+**Corrección:** la cuenta se bloquea mientras se hace el cargo o el abono (`SELECT ... FOR UPDATE`). Las operaciones sobre la misma cuenta se atienden de una en una, así que cada una ve el saldo actualizado y la que no tiene fondos se rechaza con `FONDOS_INSUFICIENTES`.
+
+El ingreso en ventanilla (AccountService.deposit) usa el mismo bloqueo, porque también modifica el saldo.
+
+**Verificación:**
+
+- Prueba por la API: cuenta con 100 € y 4 transferencias de 30 € lanzadas a la vez. Resultado: 3 `COMPLETADA`, 1 `RECHAZADA` con `FONDOS_INSUFICIENTES`; saldo final 10 € y solo 3 movimientos.
+- Test de integración: el mismo caso con 4 débitos simultáneos. Sin el bloqueo el test falla porque pasan los 4.
+
+- Test de integración de ingresos: 5 ingresos simultáneos de 10 € sobre una cuenta vacía. Sin el bloqueo el saldo final era 10 €; con él es 50 €.
+
+### 4.10. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
 
 **Estado:** implementado y verificado en el entorno local.
 

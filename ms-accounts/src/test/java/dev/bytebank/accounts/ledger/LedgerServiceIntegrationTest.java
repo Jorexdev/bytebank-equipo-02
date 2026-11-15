@@ -14,6 +14,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -66,5 +71,40 @@ class LedgerServiceIntegrationTest extends IntegrationTest {
 
         assertThatThrownBy(() -> ledger.credit(new MovementRequest("TRF-4", iban, new BigDecimal("10.00"), MovementType.TRANSFERENCIA_RECIBIDA, null)))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void concurrentDebitsDoNotOverspend() throws InterruptedException {
+        int concurrent = 4;
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(concurrent);
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+
+        ExecutorService executor = Executors.newFixedThreadPool(concurrent);
+        for (int i = 0; i < concurrent; i++) {
+            executor.submit(() -> {
+                try {
+                    start.await();
+                    ledger.debit(new MovementRequest("TRF-CONC", iban, new BigDecimal("30.00"),
+                            MovementType.TRANSFERENCIA_EMITIDA, null));
+                    successes.incrementAndGet();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } catch (ApiException e) {
+                    failures.incrementAndGet();
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
+        executor.shutdown();
+
+        assertThat(successes.get()).isEqualTo(3);
+        assertThat(failures.get()).isEqualTo(1);
+        assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("10");
     }
 }
