@@ -1,8 +1,10 @@
 package dev.bytebank.accounts.account;
 
 import dev.bytebank.accounts.account.AccountDtos.AccountResponse;
+import dev.bytebank.accounts.account.AccountDtos.AddHolderRequest;
 import dev.bytebank.accounts.account.AccountDtos.ChangeStatusRequest;
 import dev.bytebank.accounts.account.AccountDtos.DepositRequest;
+import dev.bytebank.accounts.account.AccountDtos.HolderResponse;
 import dev.bytebank.accounts.movement.MovementResponse;
 import dev.bytebank.accounts.movement.MovementService;
 import dev.bytebank.common.security.CurrentUser;
@@ -44,13 +46,13 @@ public class AccountController {
     }
 
     @GetMapping
-    public List<AccountResponse> listOwn() {
-        return accountService.listOwn(CurrentUser.get()).stream().map(AccountResponse::from).toList();
+    public List<AccountResponse> listForUser() {
+        return accountService.listForUser(CurrentUser.get()).stream().map(AccountResponse::from).toList();
     }
 
     @GetMapping("/{iban}")
     public AccountResponse get(@PathVariable String iban) {
-        return AccountResponse.from(accountService.get(iban));
+        return AccountResponse.from(accountService.getForUser(iban, CurrentUser.get()));
     }
 
     /** Extracto paginado, del más reciente al más antiguo. */
@@ -61,10 +63,12 @@ public class AccountController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return movementService.statement(accountService.get(iban), from, to, page, size);
+        return movementService.statement(accountService.getForUser(iban, CurrentUser.get()), from, to, page, size);
     }
 
+    /** Cambia el estado de una cuenta. Solo lo puede hacer un gestor. */
     @PatchMapping("/{iban}/status")
+    @PreAuthorize("hasRole('GESTOR')")
     public AccountResponse changeStatus(@PathVariable String iban, @Valid @RequestBody ChangeStatusRequest request) {
         return AccountResponse.from(accountService.changeStatus(iban, request.status()));
     }
@@ -74,5 +78,19 @@ public class AccountController {
     @PreAuthorize("hasRole('GESTOR')")
     public AccountResponse deposit(@PathVariable String iban, @Valid @RequestBody DepositRequest request) {
         return AccountResponse.from(accountService.deposit(iban, request.amount(), request.concept()));
+    }
+
+    /** Añade un titular por email. Solo un titular actual puede hacerlo. */
+    @PostMapping("/{iban}/holders")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('CLIENTE')")
+    public AccountResponse addHolder(@PathVariable String iban, @Valid @RequestBody AddHolderRequest request) {
+        return AccountResponse.from(accountService.addHolder(iban, request.email(), CurrentUser.get()));
+    }
+
+    /** Datos de los titulares de una cuenta, para mostrarlos en la interfaz. */
+    @GetMapping("/{iban}/holders")
+    public List<HolderResponse> holders(@PathVariable String iban) {
+        return accountService.holders(iban, CurrentUser.get());
     }
 }

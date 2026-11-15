@@ -25,6 +25,6 @@ public class MovementEventListener {
     public void onMovement(String payload) throws JsonProcessingException {
         MovementEvent event = objectMapper.readValue(payload, MovementEvent.class);
         log.info("Movimiento {} recibido", event.movementId());
-        notifications.notifyOwner(event);
+        notifications.notifyHolders(event);
     }
 }

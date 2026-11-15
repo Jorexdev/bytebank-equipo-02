@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /** Apunte del extracto. El importe lleva signo: positivo si entra dinero, negativo si sale. */
@@ -32,11 +33,11 @@ public class Movement {
     @Column(nullable = false)
     private MovementType type;
 
-    @Column(nullable = false)
-    private double amount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal amount;
 
-    @Column(name = "balance_after", nullable = false)
-    private double balanceAfter;
+    @Column(name = "balance_after", nullable = false, precision = 19, scale = 2)
+    private BigDecimal balanceAfter;
 
     @Column(nullable = false, length = 140)
     private String concept;
@@ -50,7 +51,7 @@ public class Movement {
     protected Movement() {
     }
 
-    public Movement(Account account, MovementType type, double amount, String concept, String reference) {
+    public Movement(Account account, MovementType type, BigDecimal amount, String concept, String reference) {
         this.account = account;
         this.type = type;
         this.amount = amount;
@@ -68,11 +69,11 @@ public class Movement {
         return type;
     }
 
-    public double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public double getBalanceAfter() {
+    public BigDecimal getBalanceAfter() {
         return balanceAfter;
     }
 

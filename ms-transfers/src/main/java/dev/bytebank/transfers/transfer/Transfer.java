@@ -67,6 +67,11 @@ public class Transfer {
         this.rejectionReason = null;
     }
 
+    public void pending() {
+        this.status = TransferStatus.PENDIENTE;
+        this.rejectionReason = null;
+    }
+
     public void reject(String reason) {
         this.status = TransferStatus.RECHAZADA;
         this.rejectionReason = reason;

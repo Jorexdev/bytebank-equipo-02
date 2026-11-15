@@ -56,15 +56,26 @@ Todos los servicios devuelven los errores así:
 
 1. El cliente hace `POST /api/transfers` con origen, destino, importe y concepto.
 2. ms-transfers comprueba los datos y registra la transferencia.
-3. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
-4. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
-5. La transferencia queda `COMPLETADA` o `RECHAZADA` con el código del error.
+3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
+4. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
+5. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
+6. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
 
 Las transferencias a otras entidades solo cargan en origen: la liquidación con el otro banco queda fuera de este sistema.
+
+## Cuentas compartidas
+
+Una cuenta puede tener hasta cuatro titulares. El creador es el primer titular y cualquier titular puede añadir a otro
+cliente por su email con `POST /api/accounts/{iban}/holders`.
+
+- Todos los titulares ven la cuenta y el extracto, transfieren desde ella y piden tarjetas.
+- El alta bloquea la fila de la cuenta para que dos altas simultáneas no superen el máximo.
+- La relación vive en `account_holders`; `accounts` ya no guarda `owner_id`.
+- `GET /api/accounts/{iban}/holders` devuelve los datos de los titulares.
 
 ## Roles
 
 | Rol | Puede |
 |---|---|
-| CLIENTE | Abrir cuentas, ver las suyas, hacer transferencias desde ellas, gestionar sus tarjetas |
-| GESTOR | Todo lo de consulta, bloquear y desbloquear cuentas, hacer ingresos en ventanilla, ver las validaciones antifraude |
+| CLIENTE | Abrir cuentas, ver las cuentas de las que es titular, hacer transferencias desde ellas, gestionar sus tarjetas |
+| GESTOR | Todo lo de consulta, bloquear y desbloquear cuentas, hacer ingresos en ventanilla, aprobar o rechazar transferencias pendientes, ver las validaciones antifraude |

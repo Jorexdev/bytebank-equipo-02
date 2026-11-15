@@ -5,9 +5,11 @@ x-service: &service
       condition: service_healthy
 
 x-common-env: &common-env
-  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
   DB_USER: ${POSTGRES_USER:-bytebank}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+  JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en .env}
+  JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
   INTERNAL_KEY: ${INTERNAL_KEY:?Falta INTERNAL_KEY en .env}
   AUTH_URL: http://ms-auth:8081
   ACCOUNTS_URL: http://ms-accounts:8082
@@ -19,7 +21,7 @@ x-common-env: &common-env
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bytebank}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
@@ -55,7 +57,11 @@ services:
     ports:
       - "29092:29092"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1",
+        ]
       interval: 10s
       timeout: 10s
       retries: 12

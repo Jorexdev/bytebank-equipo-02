@@ -13,6 +13,9 @@ target/
 # Visual Studio Code
 .vscode/
 
+# Claude Code (configuración local)
+.claude/
+
 # Sistema operativo
 .DS_Store
 Thumbs.db
