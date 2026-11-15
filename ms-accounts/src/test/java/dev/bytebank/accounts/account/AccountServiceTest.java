@@ -1,5 +1,6 @@
 package dev.bytebank.accounts.account;
 
+import dev.bytebank.accounts.client.AuthClient;
 import dev.bytebank.accounts.event.MovementPublisher;
 import dev.bytebank.accounts.movement.MovementRepository;
 import dev.bytebank.common.error.ApiException;
@@ -32,6 +33,8 @@ class AccountServiceTest {
     MovementRepository movements;
     @Mock
     MovementPublisher publisher;
+    @Mock
+    AuthClient auth;
 
     @InjectMocks
     AccountService service;

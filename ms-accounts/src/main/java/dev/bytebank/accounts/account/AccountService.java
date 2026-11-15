@@ -1,5 +1,8 @@
 package dev.bytebank.accounts.account;
 
+import dev.bytebank.accounts.account.AccountDtos.HolderResponse;
+import dev.bytebank.accounts.client.AuthClient;
+import dev.bytebank.accounts.client.AuthClient.UserInfo;
 import dev.bytebank.accounts.event.MovementPublisher;
 import dev.bytebank.accounts.movement.Movement;
 import dev.bytebank.accounts.movement.MovementRepository;
@@ -7,6 +10,7 @@ import dev.bytebank.accounts.movement.MovementType;
 import dev.bytebank.common.error.ApiException;
 import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
+import dev.bytebank.common.security.Role;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -19,15 +23,19 @@ import java.util.List;
 public class AccountService {
 
     private static final Logger log = LoggerFactory.getLogger(AccountService.class);
+    private static final int MAX_HOLDERS = 4;
 
     private final AccountRepository accounts;
     private final MovementRepository movements;
     private final MovementPublisher publisher;
+    private final AuthClient auth;
 
-    public AccountService(AccountRepository accounts, MovementRepository movements, MovementPublisher publisher) {
+    public AccountService(AccountRepository accounts, MovementRepository movements, MovementPublisher publisher,
+                          AuthClient auth) {
         this.accounts = accounts;
         this.movements = movements;
         this.publisher = publisher;
+        this.auth = auth;
     }
 
     @Transactional
@@ -89,6 +97,41 @@ public class AccountService {
         }
 
         return account;
+    }
+
+    /**
+     * Añade un titular a una cuenta. Bloquea la fila de la cuenta para que dos altas simultáneas no superen el
+     * máximo de cuatro.
+     */
+    @Transactional
+    public Account addHolder(String iban, String email, AuthUser user) {
+        Account account = accounts.findByIbanForUpdate(Iban.normalize(iban))
+                .orElseThrow(() -> ApiException.notFound("CUENTA_NO_ENCONTRADA", "No existe la cuenta " + iban));
+        if (!account.isHeldBy(user.id())) {
+            throw ApiException.forbidden("No puedes añadir titulares a una cuenta que no te pertenece");
+        }
+        UserInfo target = auth.findByEmail(email.trim());
+        if (target.role() != Role.CLIENTE) {
+            throw ApiException.badRequest("USUARIO_NO_CLIENTE", "Solo se puede añadir a un cliente");
+        }
+        if (account.isHeldBy(target.id())) {
+            throw ApiException.conflict("TITULAR_YA_EXISTE", "Ese cliente ya es titular de la cuenta");
+        }
+        if (account.getHolderIds().size() >= MAX_HOLDERS) {
+            throw ApiException.conflict("MAXIMO_TITULARES_ALCANZADO", "La cuenta ya tiene cuatro titulares");
+        }
+        account.addHolder(target.id());
+        log.info("Titular {} añadido a la cuenta {}", target.id(), account.getIban());
+        return account;
+    }
+
+    /** Datos de los titulares de una cuenta, resueltos contra ms-auth. */
+    public List<HolderResponse> holders(String iban, AuthUser user) {
+        Account account = getForUser(iban, user);
+        return account.getHolderIds().stream()
+                .map(auth::findById)
+                .map(target -> new HolderResponse(target.id(), target.email(), target.fullName()))
+                .toList();
     }
 
     @Transactional

@@ -1,6 +1,8 @@
 package dev.bytebank.accounts.account;
 
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -28,5 +30,11 @@ public final class AccountDtos {
 
     public record DepositRequest(@NotNull @Positive @Digits(integer = 17, fraction = 2) BigDecimal amount,
                                  @Size(max = 140) String concept) {
+    }
+
+    public record AddHolderRequest(@NotBlank @Email @Size(max = 180) String email) {
+    }
+
+    public record HolderResponse(Long userId, String email, String fullName) {
     }
 }
