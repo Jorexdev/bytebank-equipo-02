@@ -154,7 +154,7 @@ public class TransferService {
     public Transfer get(Long id, AuthUser user) {
         Transfer transfer = transfers.findById(id)
                 .orElseThrow(() -> ApiException.notFound("TRANSFERENCIA_NO_ENCONTRADA", "No existe la transferencia " + id));
-        if (!transfer.getCreatedBy().equals(user.id())) {
+       if (!user.isGestor() && !transfer.getCreatedBy().equals(user.id())) {
             throw ApiException.forbidden("No puedes ver esta transferencia");
         }
         return transfer;
@@ -162,6 +162,12 @@ public class TransferService {
 
     public PageResponse<TransferResponse> list(int page, int size, AuthUser user) {
         var result = transfers.findByCreatedBy(user.id(), PageRequest.of(page, size, NEWEST_FIRST));
+        return PageResponse.of(result, TransferResponse::from);
+    }
+
+    /** Transfers waiting for a gestor's decision. Only gestors can list them. */
+    public PageResponse<TransferResponse> listPending(int page, int size) {
+        var result = transfers.findByStatus(TransferStatus.PENDIENTE, PageRequest.of(page, size, NEWEST_FIRST));
         return PageResponse.of(result, TransferResponse::from);
     }
 }

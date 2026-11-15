@@ -56,7 +56,7 @@ Todos los servicios devuelven los errores así:
 
 1. El cliente hace `POST /api/transfers` con origen, destino, importe y concepto.
 2. ms-transfers comprueba los datos y registra la transferencia.
-3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza.
+3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
 4. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
 5. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
 6. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.

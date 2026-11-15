@@ -12,6 +12,8 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
 
     Page<Transfer> findByCreatedBy(Long createdBy, Pageable pageable);
 
+    Page<Transfer> findByStatus(TransferStatus status, Pageable pageable);
+
     /**
      * Updates the status only if the transfer is still pending.
      * Returns 0 when another approval or rejection has already claimed it.
