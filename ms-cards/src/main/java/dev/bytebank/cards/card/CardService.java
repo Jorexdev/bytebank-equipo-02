@@ -4,18 +4,22 @@ import dev.bytebank.cards.client.AccountsClient;
 import dev.bytebank.cards.payment.CardPayment;
 import dev.bytebank.cards.payment.CardPaymentRepository;
 import dev.bytebank.common.error.ApiException;
+import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.ZoneId;
 import java.util.List;
 
 @Service
 public class CardService {
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final CardRepository cards;
     private final CardPaymentRepository payments;
@@ -37,8 +41,15 @@ public class CardService {
 
     /** Emite una tarjeta de débito para una cuenta del usuario. Ver docs/contratos/ms-cards.md. */
     public Card issue(String iban, AuthUser user) {
-        // TODO pendiente de implementar
-        throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "NO_IMPLEMENTADO", "Emitir tarjetas aún no está disponible");
+        AccountsClient.AccountInfo account = accountsClient.getAccount(Iban.normalize(iban));
+        if (!account.isHeldBy(user.id())) {
+            throw ApiException.notFound("CUENTA_NO_ENCONTRADA", "No existe la cuenta " + iban);
+        }
+        if (!account.isActive()) {
+            throw ApiException.conflict("CUENTA_NO_OPERATIVA", "La cuenta no está activa");
+        }
+        String last4 = String.format("%04d", RANDOM.nextInt(10_000));
+        return cards.save(new Card(account.iban(), user.id(), last4, defaultDailyLimit));
     }
 
     public List<Card> listOwn(AuthUser user) {

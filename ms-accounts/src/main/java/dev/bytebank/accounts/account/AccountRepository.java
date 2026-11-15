@@ -22,7 +22,9 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     @Query("select a from Account a where a.iban = :iban")
     Optional<Account> findByIbanForUpdate(@Param("iban") String iban);
 
-    List<Account> findByOwnerIdOrderByCreatedAt(Long ownerId);
+    @Query("select distinct a from Account a join a.holders h where h.userId = :holderId " +
+            "order by a.createdAt asc, a.id asc")
+    List<Account> findByHolderId(@Param("holderId") Long holderId);
 
     List<Account> findAllByOrderByCreatedAtAscIdAsc();
 

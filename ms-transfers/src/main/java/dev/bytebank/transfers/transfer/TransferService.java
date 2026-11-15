@@ -46,7 +46,7 @@ public class TransferService {
         }
         AccountsClient.AccountInfo originAccount = accountsClient.getAccount(origin);
 
-        if (!user.id().equals(originAccount.ownerId())) {
+        if (!originAccount.isHeldBy(user.id())) {
             throw ApiException.forbidden("No puedes hacer transferencias desde cuentas que no te pertenecen");
         }
 

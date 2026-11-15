@@ -63,9 +63,19 @@ Todos los servicios devuelven los errores así:
 
 Las transferencias a otras entidades solo cargan en origen: la liquidación con el otro banco queda fuera de este sistema.
 
+## Cuentas compartidas
+
+Una cuenta puede tener hasta cuatro titulares. El creador es el primer titular y cualquier titular puede añadir a otro
+cliente por su email con `POST /api/accounts/{iban}/holders`.
+
+- Todos los titulares ven la cuenta y el extracto, transfieren desde ella y piden tarjetas.
+- El alta bloquea la fila de la cuenta para que dos altas simultáneas no superen el máximo.
+- La relación vive en `account_holders`; `accounts` ya no guarda `owner_id`.
+- `GET /api/accounts/{iban}/holders` devuelve los datos de los titulares.
+
 ## Roles
 
 | Rol | Puede |
 |---|---|
-| CLIENTE | Abrir cuentas, ver las suyas, hacer transferencias desde ellas, gestionar sus tarjetas |
+| CLIENTE | Abrir cuentas, ver las cuentas de las que es titular, hacer transferencias desde ellas, gestionar sus tarjetas |
 | GESTOR | Todo lo de consulta, bloquear y desbloquear cuentas, hacer ingresos en ventanilla, aprobar o rechazar transferencias pendientes, ver las validaciones antifraude |

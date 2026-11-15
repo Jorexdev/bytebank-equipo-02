@@ -22,7 +22,7 @@ Más detalle en [docs/arquitectura.md](docs/arquitectura.md).
 
 La API utiliza autenticación mediante JWT y distingue dos roles:
 
-- **CLIENTE:** puede consultar sus propias cuentas y movimientos, y realizar transferencias únicamente desde cuentas de su titularidad.
+- **CLIENTE:** puede consultar las cuentas de las que es titular y sus movimientos, realizar transferencias desde ellas y pedir tarjetas.
 - **GESTOR:** puede consultar todas las cuentas y sus movimientos, y cambiar el estado de las cuentas.
 
 Las operaciones internas entre microservicios utilizan rutas `/internal/**`, protegidas mediante la cabecera `X-Internal-Key` y el rol `INTERNAL`.
@@ -100,7 +100,7 @@ Si alguna de las comprobaciones falla, la ejecución global de la CI se marca co
 
 Notas para quien coja el proyecto:
 
-- **ms-cards** está a medias: se pueden listar y bloquear tarjetas, pero emitir y pagar devuelven 501.
+- **ms-cards**: se pueden listar, bloquear y emitir tarjetas; pagar sigue devolviendo 501.
   El contrato acordado está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
 - **ms-fraud** funciona por su cuenta, pero ms-transfers todavía no lo llama. Falta también la regla de frecuencia.
   Ver [docs/fraude.md](docs/fraude.md).

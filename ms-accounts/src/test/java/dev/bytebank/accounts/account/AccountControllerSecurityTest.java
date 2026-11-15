@@ -59,7 +59,7 @@ class AccountControllerSecurityTest extends IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].iban").value(clientIban))
-                .andExpect(jsonPath("$[0].ownerId").value(CLIENT_ID));
+                .andExpect(jsonPath("$[0].holderIds[0]").value(CLIENT_ID));
     }
 
     @Test
@@ -128,8 +128,9 @@ class AccountControllerSecurityTest extends IntegrationTest {
     }
 
     private String createAccount(Long ownerId) {
-        String iban = Iban.generate(accounts.nextAccountNumber());
-        return accounts.save(new Account(iban, ownerId)).getIban();
+        Account account = new Account(Iban.generate(accounts.nextAccountNumber()));
+        account.addHolder(ownerId);
+        return accounts.save(account).getIban();
     }
 
     private RequestPostProcessor authenticatedAs(Long userId, Role role) {

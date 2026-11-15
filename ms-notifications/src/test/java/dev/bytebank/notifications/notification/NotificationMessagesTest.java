@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,7 +13,7 @@ class NotificationMessagesTest {
 
     @Test
     void sentTransfer() {
-        MovementEvent event = new MovementEvent(1L, "ES7639990001000000000011", 2L, "TRANSFERENCIA_EMITIDA",
+        MovementEvent event = new MovementEvent(1L, "ES7639990001000000000011", List.of(2L), "TRANSFERENCIA_EMITIDA",
                 new BigDecimal("-12.50"), new BigDecimal("87.50"), "Cena", "TRF-1", Instant.now());
 
         assertThat(NotificationMessages.of(event))
@@ -21,7 +22,7 @@ class NotificationMessagesTest {
 
     @Test
     void depositWithoutConcept() {
-        MovementEvent event = new MovementEvent(2L, "ES7639990001000000000011", 2L, "INGRESO",
+        MovementEvent event = new MovementEvent(2L, "ES7639990001000000000011", List.of(2L), "INGRESO",
                 new BigDecimal("1500.00"), new BigDecimal("1587.50"), null, null, Instant.now());
 
         assertThat(NotificationMessages.of(event))
