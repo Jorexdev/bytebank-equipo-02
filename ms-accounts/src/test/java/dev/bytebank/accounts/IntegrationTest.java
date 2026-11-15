@@ -14,7 +14,8 @@ import org.testcontainers.utility.DockerImageName;
  * Con @Container/@Testcontainers se paraban al terminar cada clase y las siguientes fallaban
  * con "Connection refused".
  */
-@SpringBootTest(properties = "bytebank.internal-key=clave-interna-de-test")
+@SpringBootTest(properties = {"bytebank.internal-key=clave-interna-de-test",
+        "bytebank.jwt.secret=clave-secreta-de-test-que-debe-ser-muy-larga-para-pasar-la-validacion"})
 public abstract class IntegrationTest {
 
     @ServiceConnection

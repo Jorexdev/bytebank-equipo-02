@@ -6,15 +6,15 @@ de datos PostgreSQL por servicio.
 
 ## Servicios
 
-| Servicio | Puerto | Qué hace |
-|---|---|---|
-| ms-gateway | 8080 | Punto de entrada. Solo enruta las rutas `/api/**` |
-| ms-auth | 8081 | Registro, login y emisión de tokens JWT |
-| ms-accounts | 8082 | Cuentas, saldo y movimientos (extracto) |
-| ms-transfers | 8083 | Transferencias entre cuentas |
-| ms-cards | 8084 | Tarjetas de débito y pagos |
-| ms-fraud | 8085 | Validación antifraude de transferencias |
-| ms-notifications | 8086 | Avisos al cliente de cada movimiento (consume eventos de Kafka) |
+| Servicio         | Puerto | Qué hace                                                        |
+| ---------------- | ------ | --------------------------------------------------------------- |
+| ms-gateway       | 8080   | Punto de entrada. Solo enruta las rutas `/api/**`               |
+| ms-auth          | 8081   | Registro, login y emisión de tokens JWT                         |
+| ms-accounts      | 8082   | Cuentas, saldo y movimientos (extracto)                         |
+| ms-transfers     | 8083   | Transferencias entre cuentas                                    |
+| ms-cards         | 8084   | Tarjetas de débito y pagos                                      |
+| ms-fraud         | 8085   | Validación antifraude de transferencias                         |
+| ms-notifications | 8086   | Avisos al cliente de cada movimiento (consume eventos de Kafka) |
 
 Más detalle en [docs/arquitectura.md](docs/arquitectura.md).
 
@@ -26,6 +26,9 @@ La API utiliza autenticación mediante JWT y distingue dos roles:
 - **GESTOR:** puede consultar todas las cuentas y sus movimientos, y cambiar el estado de las cuentas.
 
 Las operaciones internas entre microservicios utilizan rutas `/internal/**`, protegidas mediante la cabecera `X-Internal-Key` y el rol `INTERNAL`.
+
+Los secretos (`JWT_SECRET`, `INTERNAL_KEY` y la contraseña de la base de datos) llegan siempre por variables de entorno y
+nunca se escriben en el código ni en ficheros versionados. No tienen valor por defecto: si falta alguno, el sistema no arranca.
 
 ## Stack
 
@@ -39,16 +42,31 @@ cp .env.example .env      # y cambia las claves
 docker compose up --build
 ```
 
+El `.env` no se sube al repositorio y cada persona tiene el suyo. Variables obligatorias:
+
+| Variable            | Para qué sirve                                                       |
+| ------------------- | -------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL                                             |
+| `JWT_SECRET`        | Secreto con el que se firman y validan los JWT. Mínimo 32 caracteres |
+| `INTERNAL_KEY`      | Clave compartida de las llamadas entre servicios (`/internal/**`)    |
+
+Genera un `JWT_SECRET` aleatorio y distinto en cada entorno, por ejemplo con `openssl rand -base64 48`.
+Si falta o tiene menos de 32 caracteres, los servicios no arrancan.
+
 La API queda en `http://localhost:8080`. Cada servicio publica su Swagger en
 `http://localhost:<puerto>/swagger-ui.html` (por ejemplo, `http://localhost:8082/swagger-ui.html` para ms-accounts).
 
-Con el perfil `demo` (el que viene en `.env.example`) se crean estos usuarios y unas cuentas con saldo:
+El perfil `demo` no se activa por defecto: hay que pedirlo con `SPRING_PROFILES_ACTIVE=demo` en el `.env`
+(`.env.example` ya lo trae así). Sobre una base de datos vacía crea estos usuarios y unas cuentas con saldo:
 
-| Usuario | Contraseña | Rol |
-|---|---|---|
-| gestor@bytebank.test | Gestor1234! | GESTOR |
-| ana@bytebank.test | Cliente1234! | CLIENTE (2 cuentas) |
-| luis@bytebank.test | Cliente1234! | CLIENTE (1 cuenta) |
+| Usuario              | Contraseña   | Rol                 |
+| -------------------- | ------------ | ------------------- |
+| gestor@bytebank.test | Gestor1234!  | GESTOR              |
+| ana@bytebank.test    | Cliente1234! | CLIENTE (2 cuentas) |
+| luis@bytebank.test   | Cliente1234! | CLIENTE (1 cuenta)  |
+
+Estas contraseñas son públicas, así que el perfil `demo` es solo para entornos locales. No lo actives nunca en un
+entorno con datos reales: el usuario gestor puede consultar y operar sobre todas las cuentas.
 
 Ejemplo:
 
