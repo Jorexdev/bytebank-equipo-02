@@ -348,7 +348,7 @@ Los dos fallos entraron en commits del equipo anterior, en junio de 2026:
 
 - Se ha eliminado `SecurityConstants`. El secreto se lee de `bytebank.jwt.secret`, que toma su valor de la variable de entorno `JWT_SECRET`, sin valor por defecto.
 - `BytebankProperties` valida la configuración al arrancar: si el secreto falta o tiene menos de 32 caracteres, el servicio no arranca.
-- La caducidad del token vuelve a ser configurable (`JWT_EXPIRATION_MINUTES`) y de 60 minutos por defecto.
+- La caducidad del token vuelve a ser configurable (`JWT_EXPIRATION_MINUTES`) y de 60 minutos por defecto. Si se configura con cero o un valor negativo, el servicio no arranca.
 - `docker-compose.yml` exige `JWT_SECRET` y `.env.example` explica cómo generarlo.
 - `AuthService.login` registra solo el email. Además, `LoginRequest` y `RegisterRequest` sobrescriben `toString()` para no mostrar nunca la contraseña, aunque alguien vuelva a registrar el objeto completo.
 - El perfil `demo` ya no se activa por defecto en `docker-compose.yml`: hay que pedirlo en el `.env`.
@@ -364,7 +364,7 @@ No se ha reescrito el historial de git. Reescribirlo obligaría a forzar el push
 | Clase de prueba | Módulo | Tests | Qué comprueba |
 | --- | --- | ---: | --- |
 | `JwtVerifierTest` | `common` | 5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con cualquier otro secreto, los manipulados, los caducados y el texto que no es un token |
-| `BytebankPropertiesTest` | `common` | 6 | La configuración se rechaza si el secreto es corto, está en blanco o falta, o si falta la clave interna |
+| `BytebankPropertiesTest` | `common` | 8 | La configuración se rechaza si el secreto es corto, está en blanco o falta, si falta la clave interna, o si la caducidad es cero o negativa |
 | `JwtIssuerTest` | `ms-auth` | 4 | El token emitido se valida con el mismo secreto y se rechaza con otro. Caducidad de 60 minutos por defecto |
 | `AuthDtosTest` | `ms-auth` | 3 | El `toString()` de los DTOs no muestra la contraseña |
 
@@ -372,7 +372,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Verificación:**
 
-- `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 60 tests, 0 fallos.
+- `./mvnw -B -fae verify`: `BUILD SUCCESS` en los nueve módulos, 62 tests, 0 fallos.
 - Sin `JWT_SECRET`, `docker compose` no arranca y muestra «Falta JWT_SECRET en .env».
 - Sin `SPRING_PROFILES_ACTIVE`, los servicios reciben el perfil `default` y no se crean datos de demostración.
 - Por la API, a través del Gateway: el login devuelve `expiresInSeconds: 3600` y `GET /api/accounts` responde con el token emitido.
