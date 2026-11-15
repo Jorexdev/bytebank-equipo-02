@@ -54,13 +54,26 @@ class TransferServiceTest {
     @BeforeEach
     void setUp() {
         lenient().when(transfers.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        lenient().when(accounts.getAccount(ORIGIN)).thenReturn(new AccountInfo(ORIGIN, "ACTIVA", new BigDecimal("1000"), 2L));
-        lenient().when(accounts.getAccount(DESTINATION)).thenReturn(new AccountInfo(DESTINATION, "ACTIVA", new BigDecimal("100"), 3L));
+        lenient().when(accounts.getAccount(ORIGIN))
+                .thenReturn(new AccountInfo(ORIGIN, "ACTIVA", new BigDecimal("1000"), List.of(2L)));
+        lenient().when(accounts.getAccount(DESTINATION))
+                .thenReturn(new AccountInfo(DESTINATION, "ACTIVA", new BigDecimal("100"), List.of(3L)));
     }
 
     @Test
     void completesTransferBetweenOwnAccounts() {
         Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("100.00"), "Cena"), ANA);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.COMPLETADA);
+    }
+
+    @Test
+    void coHolderCanTransferFromSharedAccount() {
+        when(accounts.getAccount(ORIGIN))
+                .thenReturn(new AccountInfo(ORIGIN, "ACTIVA", new BigDecimal("1000"), List.of(2L, 3L)));
+
+        Transfer t = service.create(
+                new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("100.00"), "Cena"), LUIS);
 
         assertThat(t.getStatus()).isEqualTo(TransferStatus.COMPLETADA);
     }
@@ -77,7 +90,8 @@ class TransferServiceTest {
 
     @Test
     void transferToBlockedAccountIsRejectedWithoutMovingMoney() {
-        when(accounts.getAccount(DESTINATION)).thenReturn(new AccountInfo(DESTINATION, "BLOQUEADA", new BigDecimal("100"), 3L));
+        when(accounts.getAccount(DESTINATION))
+                .thenReturn(new AccountInfo(DESTINATION, "BLOQUEADA", new BigDecimal("100"), List.of(3L)));
 
         Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("50.00"), null), ANA);
 
@@ -135,7 +149,7 @@ class TransferServiceTest {
                         ORIGIN,
                         "ACTIVA",
                         new BigDecimal("1000"),
-                        99L));
+                        List.of(99L)));
 
         assertThatThrownBy(() -> service.create(
                 new CreateTransferRequest(

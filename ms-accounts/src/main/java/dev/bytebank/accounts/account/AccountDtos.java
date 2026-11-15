@@ -7,17 +7,19 @@ import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public final class AccountDtos {
 
     private AccountDtos() {
     }
 
-    public record AccountResponse(String iban, AccountStatus status, BigDecimal balance, Long ownerId, Instant createdAt) {
+    public record AccountResponse(String iban, AccountStatus status, BigDecimal balance, List<Long> holderIds,
+                                  Instant createdAt) {
 
         public static AccountResponse from(Account account) {
             return new AccountResponse(account.getIban(), account.getStatus(), account.getBalance(),
-                    account.getOwnerId(), account.getCreatedAt());
+                    account.getHolderIds(), account.getCreatedAt());
         }
     }
 

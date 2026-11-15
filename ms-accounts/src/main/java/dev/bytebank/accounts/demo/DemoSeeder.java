@@ -49,7 +49,9 @@ public class DemoSeeder implements ApplicationRunner {
     }
 
     private void open(long ownerId, BigDecimal initialBalance) {
-        Account account = accounts.save(new Account(Iban.generate(accounts.nextAccountNumber()), ownerId));
+        Account account = new Account(Iban.generate(accounts.nextAccountNumber()));
+        account.addHolder(ownerId);
+        account = accounts.save(account);
         account.credit(initialBalance);
         movements.save(new Movement(account, MovementType.INGRESO, initialBalance, "Saldo inicial", null));
     }

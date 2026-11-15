@@ -1,5 +1,7 @@
 package dev.bytebank.accounts.account;
 
+import dev.bytebank.accounts.event.MovementPublisher;
+import dev.bytebank.accounts.movement.MovementRepository;
 import dev.bytebank.common.error.ApiException;
 import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
@@ -26,6 +28,10 @@ class AccountServiceTest {
 
     @Mock
     AccountRepository accounts;
+    @Mock
+    MovementRepository movements;
+    @Mock
+    MovementPublisher publisher;
 
     @InjectMocks
     AccountService service;
@@ -42,7 +48,7 @@ class AccountServiceTest {
 
     @Test
     void knownIbanIsReturned() {
-        Account account = new Account(IBAN, 1L);
+        Account account = account(IBAN, 1L);
         when(accounts.findByIban(IBAN)).thenReturn(Optional.of(account));
 
         assertThat(service.get(IBAN)).isSameAs(account);
@@ -51,9 +57,9 @@ class AccountServiceTest {
     @Test
     void clientCanOnlyListOwnAccounts() {
         AuthUser client = new AuthUser(1L, "client@test.com", Role.CLIENTE);
-        Account account = new Account(IBAN, 1L);
+        Account account = account(IBAN, 1L);
 
-        when(accounts.findByOwnerIdOrderByCreatedAt(1L)).thenReturn(List.of(account));
+        when(accounts.findByHolderId(1L)).thenReturn(List.of(account));
 
         assertThat(service.listForUser(client)).containsExactly(account);
     }
@@ -61,8 +67,8 @@ class AccountServiceTest {
     @Test
     void gestorCanListAllAccounts() {
         AuthUser gestor = new AuthUser(2L, "gestor@test.com", Role.GESTOR);
-        Account firstAccount = new Account(Iban.generate(100), 1L);
-        Account secondAccount = new Account(Iban.generate(101), 3L);
+        Account firstAccount = account(Iban.generate(100), 1L);
+        Account secondAccount = account(Iban.generate(101), 3L);
 
         when(accounts.findAllByOrderByCreatedAtAscIdAsc())
                 .thenReturn(List.of(firstAccount, secondAccount));
@@ -74,7 +80,7 @@ class AccountServiceTest {
     @Test
     void clientCanAccessOwnAccount() {
         AuthUser client = new AuthUser(1L, "client@test.com", Role.CLIENTE);
-        Account account = new Account(IBAN, 1L);
+        Account account = account(IBAN, 1L);
 
         when(accounts.findByIban(IBAN)).thenReturn(Optional.of(account));
 
@@ -84,7 +90,7 @@ class AccountServiceTest {
     @Test
     void clientCannotAccessAnotherUsersAccount() {
         AuthUser client = new AuthUser(1L, "client@test.com", Role.CLIENTE);
-        Account account = new Account(IBAN, 2L);
+        Account account = account(IBAN, 2L);
 
         when(accounts.findByIban(IBAN)).thenReturn(Optional.of(account));
 
@@ -97,10 +103,18 @@ class AccountServiceTest {
     @Test
     void gestorCanAccessAnotherUsersAccount() {
         AuthUser gestor = new AuthUser(2L, "gestor@test.com", Role.GESTOR);
-        Account account = new Account(IBAN, 1L);
+        Account account = account(IBAN, 1L);
 
         when(accounts.findByIban(IBAN)).thenReturn(Optional.of(account));
 
         assertThat(service.getForUser(IBAN, gestor)).isSameAs(account);
+    }
+
+    private static Account account(String iban, Long... holderIds) {
+        Account account = new Account(iban);
+        for (Long holderId : holderIds) {
+            account.addHolder(holderId);
+        }
+        return account;
     }
 }

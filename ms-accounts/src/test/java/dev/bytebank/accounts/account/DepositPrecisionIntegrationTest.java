@@ -37,7 +37,8 @@ class DepositPrecisionIntegrationTest extends IntegrationTest {
     void setUp() {
         jdbc.update("delete from movements");
         jdbc.update("delete from accounts");
-        Account account = new Account(Iban.generate(accounts.nextAccountNumber()), 1L);
+        Account account = new Account(Iban.generate(accounts.nextAccountNumber()));
+        account.addHolder(1L);
         iban = accounts.save(account).getIban();
     }
 

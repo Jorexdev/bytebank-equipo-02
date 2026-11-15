@@ -32,7 +32,9 @@ public class AccountService {
 
     @Transactional
     public Account open(AuthUser user) {
-        Account account = accounts.save(new Account(Iban.generate(accounts.nextAccountNumber()), user.id()));
+        Account account = new Account(Iban.generate(accounts.nextAccountNumber()));
+        account.addHolder(user.id());
+        account = accounts.save(account);
         log.info("Cuenta {} abierta por el usuario {}", account.getIban(), user.id());
         return account;
     }
@@ -49,7 +51,7 @@ public class AccountService {
         if (user.isGestor()) {
             return accounts.findAllByOrderByCreatedAtAscIdAsc();
         }
-        return accounts.findByOwnerIdOrderByCreatedAt(user.id());
+        return accounts.findByHolderId(user.id());
     }
 
     /**
@@ -81,7 +83,7 @@ public class AccountService {
     public Account getForUser(String iban, AuthUser user) {
         Account account = get(iban);
 
-        if (!user.isGestor() && !account.getOwnerId().equals(user.id())) {
+        if (!user.isGestor() && !account.isHeldBy(user.id())) {
             throw ApiException.forbidden(
                     "No puedes consultar una cuenta que no te pertenece");
         }
