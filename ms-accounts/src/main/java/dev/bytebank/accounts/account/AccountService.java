@@ -99,7 +99,10 @@ public class AccountService {
 
     @Transactional
     public Account deposit(String iban, BigDecimal amount, String concept) {
-        Account account = get(iban);
+
+        Account account = accounts.findByIbanForUpdate(Iban.normalize(iban))
+                .orElseThrow(() -> ApiException.notFound("CUENTA_NO_ENCONTRADA", "No existe la cuenta " + iban));
+        
         if (!account.isActive()) {
             throw ApiException.conflict("CUENTA_NO_OPERATIVA", "La cuenta no está activa");
         }

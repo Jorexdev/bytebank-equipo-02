@@ -8,6 +8,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -58,4 +62,31 @@ class DepositPrecisionIntegrationTest extends IntegrationTest {
 
         assertThat(saldosTrasMovimiento).containsExactly(new BigDecimal("0.10"), new BigDecimal("0.30"));
     }
+
+    @Test
+void ingresosSimultaneosNoPierdenDinero() throws InterruptedException {
+    int concurrent = 5;
+    CountDownLatch start = new CountDownLatch(1);
+    CountDownLatch done = new CountDownLatch(concurrent);
+
+    ExecutorService executor = Executors.newFixedThreadPool(concurrent);
+    for (int i = 0; i < concurrent; i++) {
+        executor.submit(() -> {
+            try {
+                start.await();
+                accountService.deposit(iban, new BigDecimal("10.00"), "Ingreso simultáneo");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                done.countDown();
+            }
+        });
+    }
+
+    start.countDown();
+    assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();
+    executor.shutdown();
+
+    assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("50.00");
+}
 }

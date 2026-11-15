@@ -306,7 +306,48 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** probar con la API real a través del Gateway.
 
-### 4.9. SEG-02 — Secretos en el repositorio
+### 4.9. CON-01 — Transferencias simultáneas gastan más que el saldo
+
+**Estado:** corregido y verificado en el entorno local.
+**Impacto:** un cliente con 100 € lanzó varias transferencias de 30 € a la vez y se ejecutaron todas, dejando la cuenta sin fondos suficientes para cubrirlas.
+
+**Causa:** al cobrar o abonar, `LedgerService` leía el saldo sin bloquear la cuenta. Varias peticiones simultáneas veían el mismo importe, pasaban la comprobación y escribían su propio resultado, pisándose unas a otras.
+
+**Corrección:** la cuenta se bloquea mientras se hace el cargo o el abono (`SELECT ... FOR UPDATE`). Las operaciones sobre la misma cuenta se atienden de una en una, así que cada una ve el saldo actualizado y la que no tiene fondos se rechaza con `FONDOS_INSUFICIENTES`.
+
+El ingreso en ventanilla (AccountService.deposit) usa el mismo bloqueo, porque también modifica el saldo.
+
+**Verificación:**
+
+- Prueba por la API: cuenta con 100 € y 4 transferencias de 30 € lanzadas a la vez. Resultado: 3 `COMPLETADA`, 1 `RECHAZADA` con `FONDOS_INSUFICIENTES`; saldo final 10 € y solo 3 movimientos.
+- Test de integración: el mismo caso con 4 débitos simultáneos. Sin el bloqueo el test falla porque pasan los 4.
+
+- Test de integración de ingresos: 5 ingresos simultáneos de 10 € sobre una cuenta vacía. Sin el bloqueo el saldo final era 10 €; con él es 50 €.
+
+### 4.10. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
+
+**Estado:** implementado y verificado en el entorno local.
+
+**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
+
+**Cambios aplicados:**
+
+- Nuevo estado `PENDIENTE` para la transferencia.
+- Al crear una transferencia de más de 5.000 € se guarda como pendiente y no se llama a ms-accounts.
+- Nuevos endpoints `POST /api/transfers/{id}/approve` y `POST /api/transfers/{id}/reject`, solo para el rol `GESTOR`.
+- Aprobar ejecuta el mismo flujo que una transferencia normal, incluida la comprobación de destino y el reverso de BUG-06. Rechazar deja el motivo `RECHAZADA_POR_GESTOR`.
+- El cambio de estado es condicional: si dos gestores actúan a la vez, solo el primero lo consigue.
+- Nuevo endpoint `GET /api/transfers/pending`, solo para el rol `GESTOR`: lista paginada de las transferencias pendientes de aprobación.
+- Un gestor puede consultar cualquier transferencia con `GET /api/transfers/{id}`. Los clientes siguen viendo solo las suyas.
+
+**Verificación:**
+
+- Tests automáticos: 17 en `TransferServiceTest`.
+- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
+
+**Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
+
+### 4.11. SEG-02 — Secretos en el repositorio
 
 **Estado:** corregido y verificado mediante pruebas automatizadas y pruebas por la API.  
 **Fecha de corrección:** 14 de noviembre de 2026.
@@ -464,7 +505,7 @@ Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución genera
 Los siguientes puntos requieren una revisión específica:
 
 - **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
-- **Credenciales:** revisado en SEG-02 (4.9). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
+- **Credenciales:** revisado en SEG-02 (4.11). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
 - **Alta de gestores:** el único sitio del código que crea un usuario con rol `GESTOR` es el seeder del perfil `demo`, que usa una contraseña pública. El registro crea siempre usuarios `CLIENTE` y no existe ningún endpoint para dar de alta gestores. Si un entorno con datos reales se inicializara con el perfil `demo`, quedaría un gestor con contraseña conocida y acceso a todas las cuentas. En SEG-02 se ha evitado que el perfil se active por defecto, pero falta un mecanismo de alta de gestores que no dependa de la demo.
 - **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
 - **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
