@@ -18,7 +18,7 @@ ms-accounts  --(topic bytebank.movements)-->  ms-notifications  <--  GET /api/no
 {
   "movementId": 154,
   "iban": "ES7639990001000000000001",
-  "ownerId": 2,
+  "holderIds": [2, 3],
   "type": "TRANSFERENCIA_EMITIDA",
   "amount": -50.00,
   "balanceAfter": 2450.00,
@@ -33,7 +33,8 @@ ms-accounts  --(topic bytebank.movements)-->  ms-notifications  <--  GET /api/no
 
 ## Reglas
 
-- Cada movimiento genera un aviso para el titular de la cuenta (para todos los titulares, si tiene varios).
+- Cada movimiento genera un aviso por cada titular de la cuenta.
+- Un evento sin `holderIds` (mensaje antiguo) se ignora y no genera avisos.
 - Solo se avisa de movimientos que existen: si una operación falla, el cliente no recibe aviso de ella.
 - Un cliente no recibe dos veces el aviso del mismo movimiento.
 
