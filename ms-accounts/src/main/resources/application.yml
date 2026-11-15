@@ -19,6 +19,8 @@ spring:
 
 bytebank:
   zone: Europe/Madrid
+  jwt:
+    secret: ${JWT_SECRET}
   internal-key: ${INTERNAL_KEY}
   services:
     auth-url: ${AUTH_URL:http://localhost:8081}
