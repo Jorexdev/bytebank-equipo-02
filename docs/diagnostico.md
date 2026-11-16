@@ -446,7 +446,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve dinero. La decisión es de **fallo cerrado**: no se ejecuta una operación sin control antifraude y no se guarda un rechazo falso; el cliente puede reintentar.
 - La aprobación del gestor no repite la validación: se hizo al crear la transferencia.
 - `GET /api/fraud/checks` queda restringido al rol `GESTOR`.
-- `AmountRule` bloquea a partir de 20.000 €, como dice la regla acordada; antes solo bloqueaba por encima de 20.000.
+- `AmountRule` bloquea a partir de 20.000 €, como dice la regla acordada; antes solo bloqueaba por encima de 20.000 (tarjeta FRA-03).
 
 **Verificación:**
 
@@ -457,9 +457,36 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Límites:**
 
-- La regla de frecuencia (`FRECUENCIA_ALTA`) sigue pendiente.
+- La regla de frecuencia se implementó después; ver 4.14.
 - El listado de transferencias pendientes no muestra el motivo del fraude; el gestor puede consultarlo en `GET /api/fraud/checks?iban=...`.
-- `rejection_reason` es `VARCHAR(40)`. Las reglas actuales caben, pero si se añaden más motivos (por ejemplo, la frecuencia) el texto combinado puede superar el límite y fallar el guardado. Habría que ampliar la columna o guardar solo el motivo principal.
+- `rejection_reason` era `VARCHAR(40)`. Se amplió a `VARCHAR(255)` en 4.14, porque con la frecuencia un bloqueo puede juntar tres motivos.
+
+### 4.14. FRA-02 — Regla de frecuencia antifraude
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** ms-fraud no limitaba el número de validaciones por cuenta. Una cuenta podía encadenar transferencias de importe bajo sin que saltara ninguna regla.
+
+**Causa:** la regla `FRECUENCIA_ALTA` estaba acordada y documentada, pero no implementada.
+
+**Corrección:**
+
+- Nueva `FrequencyRule`: cuenta las validaciones de la cuenta de origen en los últimos 10 minutos y bloquea la sexta con `BLOQUEADA` / `FRECUENCIA_ALTA`.
+- La ventana y el máximo se configuran en `application.yml` (`frequency-window: 10m`, `frequency-max: 5`).
+- Se reutiliza la tabla `fraud_checks` y su índice; no hay tabla nueva.
+- Se cuentan todas las validaciones, incluidas las bloqueadas o rechazadas, para que un atacante no pueda seguir probando.
+- La migración `V2` de ms-transfers amplía `rejection_reason` a `VARCHAR(255)`: con la nueva regla, un bloqueo puede juntar tres motivos y superar los 40 caracteres.
+
+**Verificación:**
+
+- `FrequencyRuleTest`: 4 validaciones previas → pasa; 5 → `BLOQUEADA`; la consulta usa `now - 10m`.
+- `./mvnw -pl ms-fraud,ms-transfers -am test` → 44 tests, 0 fallos.
+- API: 5 transferencias de 1 € → `COMPLETADA`; la 6ª → `RECHAZADA` / `FRECUENCIA_ALTA`, sin mover dinero. Una externa de 21.000 € tras 6 checks → `RECHAZADA` con `IMPORTE_MAXIMO`, `EXTERNA_IMPORTE_ALTO` y `FRECUENCIA_ALTA`; la migración `V2` guardó el motivo de 51 caracteres sin error.
+
+**Límites:**
+
+- La frecuencia se cuenta sobre `fraud_checks`, así que un intento fallido también acerca el bloqueo.
+- Dos peticiones simultáneas pueden leer el mismo historial y dejar pasar como mucho una operación extra; no hay bloqueo por cuenta.
 
 ## 5. Funcionalidades incompletas identificadas
 
@@ -468,8 +495,8 @@ El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las
 | Área             | Estado descrito en el README                                                     |
 | ---------------- | -------------------------------------------------------------------------------- |
 | ms-cards         | Permite listar y bloquear tarjetas, pero emitir y pagar devuelve HTTP 501.       |
-| ms-fraud         | Integrado en `ms-transfers`; la regla de frecuencia sigue pendiente.             |
-| Antifraude       | Falta implementar la regla de frecuencia.                                        |
+| ms-fraud         | Integrado en `ms-transfers` con las reglas de importe, externa y frecuencia.     |
+| Antifraude       | Reglas de importe máximo, transferencia externa y frecuencia implementadas.      |
 | ms-notifications | Consume eventos Kafka y guarda avisos, pero falta el endpoint para consultarlos. |
 | Extractos        | Se han recibido quejas sobre movimientos que no aparecen correctamente.          |
 
@@ -548,7 +575,7 @@ Los siguientes puntos requieren una revisión específica:
 - **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
 - **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
 - **Concurrencia:** comprobar que las operaciones simultáneas no permitan saldos inconsistentes.
-- **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13). Queda implementar la regla de frecuencia. El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
+- **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
 - **Kafka:** comprobar que los eventos solo se publiquen cuando la operación correspondiente se haya confirmado y que los consumidores gestionen correctamente los mensajes repetidos.
 - **Notificaciones:** verificar la persistencia y consulta de avisos, así como su idempotencia.
 - **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.

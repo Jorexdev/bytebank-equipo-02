@@ -17,9 +17,19 @@ Solo los gestores pueden consultarlas con `GET /api/fraud/checks?iban=...`.
 |---|---|---|---|---|
 | Importe máximo por operación | `IMPORTE_MAXIMO` | Importe de 20.000 € o más | BLOQUEADA | Hecha |
 | Transferencia a otra entidad | `EXTERNA_IMPORTE_ALTO` | Destino de otro banco e importe de 1.000 € o más | REVISAR | Hecha |
-| Frecuencia | `FRECUENCIA_ALTA` | Más de 5 transferencias desde la misma cuenta en 10 minutos (se bloquea la sexta) | BLOQUEADA | Pendiente |
+| Frecuencia | `FRECUENCIA_ALTA` | Más de 5 validaciones desde la misma cuenta en 10 minutos (se bloquea la sexta) | BLOQUEADA | Hecha |
 
-Los umbrales se configuran en `application.yml` (`bytebank.fraud.*`).
+La regla de frecuencia cuenta las validaciones de la cuenta de origen en los últimos 10 minutos, incluidas las
+bloqueadas o rechazadas. Si ya hay 5, la siguiente se bloquea.
+
+Los umbrales se configuran en `application.yml` (`bytebank.fraud.*`):
+
+```yaml
+block-threshold: 20000.00
+external-review-threshold: 1000.00
+frequency-max: 5
+frequency-window: 10m
+```
 
 ## Contrato
 
@@ -55,6 +65,8 @@ Motivos:
 - El cliente puede reintentar cuando el servicio se recupere.
 - Es el mismo comportamiento que cuando no responde ms-accounts.
 
-## Pendiente
+## Límites
 
-- Implementar la regla de frecuencia (`FRECUENCIA_ALTA`).
+- La frecuencia se cuenta sobre `fraud_checks`, así que un intento fallido también acerca el bloqueo.
+- No hay bloqueo por cuenta: dos peticiones simultáneas pueden leer el mismo historial y dejar pasar como mucho una
+  operación extra. Si se necesita un conteo estricto, habría que añadir un bloqueo por cuenta.
