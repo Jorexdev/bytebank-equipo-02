@@ -258,7 +258,7 @@ Resultado: `BUILD SUCCESS`. Los nueve módulos del proyecto han completado corre
 
 **Resultado:** la incidencia SEG-01 queda corregida y verificada. Se mantienen las restricciones de acceso por rol y titularidad sin alterar el mecanismo de comunicación interna entre microservicios.
 
-### 4.6. BUG-06 — Transferencia a cuenta bloqueada pierde el dinero
+### 4.7. BUG-06 — Transferencia a cuenta bloqueada pierde el dinero
 
 **Estado:** corregido y verificado en el entorno local.  
 **Fecha de corrección:** 12 de noviembre de 2026.
@@ -279,7 +279,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** el reverso no se puede provocar manualmente con la API actual; su verificación se realiza en la prueba unitaria.
 
-### 4.7. Extracto: falta un movimiento en cada página
+### 4.8. Extracto: falta un movimiento en cada página
 
 **Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.
 **Impacto:** el extracto se saltaba un movimiento al principio de cada página, así que el cliente nunca veía todos sus movimientos.
@@ -290,7 +290,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Verificación:** test `firstPageStartsAtOffsetZero` en `MovementServiceTest`.
 
-### 4.8. Extracto: el filtro por fechas no incluye el último día
+### 4.9. Extracto: el filtro por fechas no incluye el último día
 
 **Estado:** corregido en código (rama `fix/date-filter-does-not-show-the-most-recent-day`), pendiente de probar en el entorno.
 **Impacto:** al filtrar el extracto con `to`, los movimientos de ese día no aparecían. Además, los límites del rango se calculaban en UTC, de modo que los movimientos hechos entre las 00:00 y las 01:00/02:00 (hora de Madrid) caían en el día anterior.
@@ -306,7 +306,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Pendiente:** probar con la API real a través del Gateway.
 
-### 4.9. CON-01 — Transferencias simultáneas gastan más que el saldo
+### 4.10. CON-01 — Transferencias simultáneas gastan más que el saldo
 
 **Estado:** corregido y verificado en el entorno local.
 **Impacto:** un cliente con 100 € lanzó varias transferencias de 30 € a la vez y se ejecutaron todas, dejando la cuenta sin fondos suficientes para cubrirlas.
@@ -324,7 +324,7 @@ El ingreso en ventanilla (AccountService.deposit) usa el mismo bloqueo, porque t
 
 - Test de integración de ingresos: 5 ingresos simultáneos de 10 € sobre una cuenta vacía. Sin el bloqueo el saldo final era 10 €; con él es 50 €.
 
-### 4.10. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
+### 4.11. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
 
 **Estado:** implementado y verificado en el entorno local.
 
@@ -347,7 +347,7 @@ El ingreso en ventanilla (AccountService.deposit) usa el mismo bloqueo, porque t
 
 **Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
 
-### 4.11. SEG-02 — Secretos en el repositorio
+### 4.12. SEG-02 — Secretos en el repositorio
 
 **Estado:** corregido y verificado mediante pruebas automatizadas y pruebas por la API.  
 **Fecha de corrección:** 14 de noviembre de 2026.
@@ -428,6 +428,39 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - El valor de ejemplo de `JWT_SECRET` en `.env.example` supera los 32 caracteres, así que el sistema arranca aunque no se cambie. Es cómodo para la demo, pero quien no lo sustituya funciona con un secreto público.
 - Cuando la validación rechaza un secreto, Spring escribe el valor rechazado en el log de arranque. Un secreto real demasiado corto quedaría registrado.
 
+### 4.13. Antifraude — ms-transfers no validaba las transferencias
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** ms-fraud tenía las reglas y el contrato, pero ms-transfers no lo llamaba. Las transferencias se ejecutaban sin comprobar el importe máximo ni las transferencias externas de importe alto. La regla de frecuencia tampoco estaba implementada.
+
+**Causa:** `TransferService.create` solo validaba el IBAN, el importe y la titularidad; no existía ningún cliente hacia ms-fraud. El `TODO` de `TransferService` dejaba la integración pendiente.
+
+**Corrección:**
+
+- Nuevo `FraudClient` en ms-transfers; llama a `POST /internal/fraud/check` con la clave interna.
+- Cada transferencia se valida después de comprobar la titularidad y antes de guardarse o ejecutarse.
+- `BLOQUEADA`: la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado. No se mueve dinero.
+- `REVISAR`: queda `PENDIENTE`, igual que las de más de 5.000 €. Un gestor la aprueba o la rechaza.
+- `APROBADA`: sigue el flujo normal; si supera 5.000 €, CAM-02 la deja pendiente.
+- Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve dinero. La decisión es de **fallo cerrado**: no se ejecuta una operación sin control antifraude y no se guarda un rechazo falso; el cliente puede reintentar.
+- La aprobación del gestor no repite la validación: se hizo al crear la transferencia.
+- `GET /api/fraud/checks` queda restringido al rol `GESTOR`.
+- `AmountRule` bloquea a partir de 20.000 €, como dice la regla acordada; antes solo bloqueaba por encima de 20.000.
+
+**Verificación:**
+
+- Tests automáticos: `./mvnw -pl ms-transfers,ms-fraud -am test` → 41 tests, 0 fallos. `TransferServiceTest` pasa de 18 a 22 tests; `AmountRuleTest` tiene 3.
+- API: 21.000 € → `RECHAZADA` / `IMPORTE_MAXIMO`; 20.000 € exactos → `RECHAZADA` / `IMPORTE_MAXIMO`; 1.500 € a otra entidad → `PENDIENTE` con veredicto `REVISAR` / `EXTERNA_IMPORTE_ALTO`; el gestor la aprueba y el dinero se mueve; 100 € interna → `COMPLETADA`; 6.000 € interna → `PENDIENTE` por CAM-02 y el gestor la rechaza.
+- Con ms-fraud parado, una transferencia devuelve `503 SERVICIO_NO_DISPONIBLE`, no crea la transferencia y no cambia el saldo.
+- `GET /api/fraud/checks` con un cliente devuelve 403; con un gestor, 200.
+
+**Límites:**
+
+- La regla de frecuencia (`FRECUENCIA_ALTA`) sigue pendiente.
+- El listado de transferencias pendientes no muestra el motivo del fraude; el gestor puede consultarlo en `GET /api/fraud/checks?iban=...`.
+- `rejection_reason` es `VARCHAR(40)`. Las reglas actuales caben, pero si se añaden más motivos (por ejemplo, la frecuencia) el texto combinado puede superar el límite y fallar el guardado. Habría que ampliar la columna o guardar solo el motivo principal.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
@@ -435,14 +468,14 @@ El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las
 | Área             | Estado descrito en el README                                                     |
 | ---------------- | -------------------------------------------------------------------------------- |
 | ms-cards         | Permite listar y bloquear tarjetas, pero emitir y pagar devuelve HTTP 501.       |
-| ms-fraud         | Funciona de forma independiente, pero `ms-transfers` todavía no lo integra.      |
+| ms-fraud         | Integrado en `ms-transfers`; la regla de frecuencia sigue pendiente.             |
 | Antifraude       | Falta implementar la regla de frecuencia.                                        |
 | ms-notifications | Consume eventos Kafka y guarda avisos, pero falta el endpoint para consultarlos. |
 | Extractos        | Se han recibido quejas sobre movimientos que no aparecen correctamente.          |
 
 Estas limitaciones están documentadas por el equipo anterior, pero deben verificarse con pruebas durante el desarrollo.
 
-Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.7 y 4.8.
+Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.8 y 4.9.
 
 ## 6. Pruebas y cobertura inicial
 
@@ -459,6 +492,8 @@ En la inspección inicial no se han localizado clases de prueba en `ms-auth`, `m
 La existencia de pruebas no garantiza que cubran todos los escenarios de negocio. Es necesario revisar su contenido, ejecución y resultados antes de valorar la cobertura real.
 
 ### 6.1. Resultados de las pruebas automatizadas
+
+**Nota:** las cifras de esta sección corresponden a la ejecución inicial del 10/11/2026 y no incluyen las correcciones posteriores. Para el estado actual, ver las secciones 4.x.
 
 **Fecha de ejecución:** 10/11/2026.
 
@@ -485,7 +520,7 @@ En `MovementServiceTest` de `ms-accounts` se ha identificado un test deshabilita
 
 - **Test:** `filterByDateIncludesLastDay`.
 - **Motivo indicado en el código:** «Falla en el portátil de Iván por la zona horaria, revisar».
-- **Estado:** resuelto. Ver 4.8.
+- **Estado:** resuelto. Ver 4.9.
 
 El origen estaba en la implementación: el fin del rango era exclusivo y se calculaba en UTC. El test se ha sustituido por `rangeIncludesLastDayInMadridTime`, que se ejecuta y pasa sin depender de la zona horaria de la máquina.
 
@@ -501,24 +536,24 @@ Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución genera
 
 **Conclusión:** el principal bloqueo de las pruebas automatizadas se encuentra en `ms-accounts`, debido a la migración V3. También queda pendiente revisar el test de filtrado por fecha que está deshabilitado.
 
-**Actualización:** la migración V3 está corregida (4.1) y el test de filtrado por fecha se ha sustituido por uno que ya no se omite (4.8).
+**Actualización:** la migración V3 está corregida (4.1) y el test de filtrado por fecha se ha sustituido por uno que ya no se omite (4.9).
 
 ## 7. Riesgos y aspectos pendientes de investigación
 
 Los siguientes puntos requieren una revisión específica:
 
 - **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
-- **Credenciales:** revisado en SEG-02 (4.11). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
+- **Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
 - **Alta de gestores:** el único sitio del código que crea un usuario con rol `GESTOR` es el seeder del perfil `demo`, que usa una contraseña pública. El registro crea siempre usuarios `CLIENTE` y no existe ningún endpoint para dar de alta gestores. Si un entorno con datos reales se inicializara con el perfil `demo`, quedaría un gestor con contraseña conocida y acceso a todas las cuentas. En SEG-02 se ha evitado que el perfil se active por defecto, pero falta un mecanismo de alta de gestores que no dependa de la demo.
 - **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
 - **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
 - **Concurrencia:** comprobar que las operaciones simultáneas no permitan saldos inconsistentes.
-- **Antifraude:** revisar la integración con `ms-fraud`, las reglas de validación y el comportamiento ante errores o falta de respuesta.
+- **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13). Queda implementar la regla de frecuencia. El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
 - **Kafka:** comprobar que los eventos solo se publiquen cuando la operación correspondiente se haya confirmado y que los consumidores gestionen correctamente los mensajes repetidos.
 - **Notificaciones:** verificar la persistencia y consulta de avisos, así como su idempotencia.
 - **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.
 - **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
-- **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.8). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
+- **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
 
 Estos puntos son líneas de investigación y no deben considerarse defectos confirmados hasta reproducirlos o verificar su causa.
 
@@ -528,7 +563,7 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
 3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
 4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
-5. ~~Investigar el test omitido por la incidencia de zona horaria.~~ Resuelto (4.8).
+5. ~~Investigar el test omitido por la incidencia de zona horaria.~~ Resuelto (4.9).
 6. Continuar investigando y documentando las incidencias funcionales y de seguridad pendientes.
 7. Implementar las funcionalidades pendientes según las tarjetas del backlog.
 8. Actualizar este documento con las correcciones realizadas y las pruebas que acrediten su funcionamiento.

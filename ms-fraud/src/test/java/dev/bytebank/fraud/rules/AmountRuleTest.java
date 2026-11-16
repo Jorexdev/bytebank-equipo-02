@@ -22,6 +22,14 @@ class AmountRuleTest {
     }
 
     @Test
+    void blocksTheExactThreshold() {
+        var hit = rule.evaluate(context("20000"));
+
+        assertThat(hit).isPresent();
+        assertThat(hit.get().verdict()).isEqualTo(Verdict.BLOQUEADA);
+    }
+
+    @Test
     void letsNormalAmountsThrough() {
         assertThat(rule.evaluate(context("150"))).isEmpty();
     }

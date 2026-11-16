@@ -2,14 +2,14 @@
 
 ms-fraud recibe cada transferencia antes de ejecutarse y devuelve un veredicto:
 
-| Veredicto | Qué significa |
-|---|---|
-| `APROBADA` | Se puede ejecutar |
-| `REVISAR` | Un gestor tiene que revisarla antes de ejecutarla |
-| `BLOQUEADA` | Se rechaza |
+| Veredicto | Qué significa | Qué hace ms-transfers |
+|---|---|---|
+| `APROBADA` | Se puede ejecutar | Sigue el flujo normal; si supera 5.000 €, queda pendiente por la regla de CAM-02 |
+| `REVISAR` | Un gestor tiene que revisarla antes de ejecutarla | Queda `PENDIENTE`, sin mover dinero, hasta que un gestor la aprueba o la rechaza |
+| `BLOQUEADA` | Se rechaza | Queda `RECHAZADA` con el código de la regla o reglas que hayan saltado; no se mueve dinero |
 
-Si saltan varias reglas, gana el veredicto más grave. Cada validación queda guardada (tabla `fraud_checks`)
-y los gestores pueden consultarlas en `GET /api/fraud/checks?iban=...`.
+Si saltan varias reglas, gana el veredicto más grave. Cada validación queda guardada (tabla `fraud_checks`).
+Solo los gestores pueden consultarlas con `GET /api/fraud/checks?iban=...`.
 
 ## Reglas acordadas con negocio
 
@@ -35,8 +35,26 @@ Respuesta:
 { "checkId": 17, "verdict": "REVISAR", "reasons": ["EXTERNA_IMPORTE_ALTO"] }
 ```
 
+## Integración con ms-transfers
+
+ms-transfers llama a `POST /internal/fraud/check` después de comprobar los datos y la titularidad de la cuenta de
+origen, y antes de guardar o ejecutar la transferencia.
+
+La aprobación de un gestor no repite la validación: cuando aprueba una transferencia `PENDIENTE`, ejecuta el
+movimiento con el veredicto que ya se registró al crearla.
+
+## Si ms-fraud no responde
+
+Decisión del equipo: **fallo cerrado**. Si ms-fraud no responde, tarda demasiado o devuelve un error de servidor,
+ms-transfers responde `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve dinero.
+
+Motivos:
+
+- No se ejecuta una transferencia sin la validación antifraude.
+- No se guarda un rechazo falso: la operación no llegó a existir.
+- El cliente puede reintentar cuando el servicio se recupere.
+- Es el mismo comportamiento que cuando no responde ms-accounts.
+
 ## Pendiente
 
-- ms-transfers todavía no llama a ms-fraud.
-- Implementar la regla de frecuencia.
-- Decidir qué hace ms-transfers si ms-fraud no responde. Negocio no lo ha cerrado.
+- Implementar la regla de frecuencia (`FRECUENCIA_ALTA`).

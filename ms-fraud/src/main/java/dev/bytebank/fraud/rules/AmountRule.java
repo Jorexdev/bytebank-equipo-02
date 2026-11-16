@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
-/** Límite por operación: los importes por encima del umbral se bloquean. */
+/** Límite por operación: los importes a partir del umbral se bloquean. */
 @Component
 public class AmountRule implements FraudRule {
 
@@ -20,7 +20,7 @@ public class AmountRule implements FraudRule {
 
     @Override
     public Optional<Hit> evaluate(Context context) {
-        if (context.amount().compareTo(properties.blockThreshold()) > 0) {
+        if (context.amount().compareTo(properties.blockThreshold()) >= 0) {
             return Optional.of(new Hit(CODE, Verdict.BLOQUEADA));
         }
         return Optional.empty();

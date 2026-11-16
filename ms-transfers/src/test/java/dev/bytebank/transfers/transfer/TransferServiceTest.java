@@ -1,12 +1,14 @@
 package dev.bytebank.transfers.transfer;
 
 import dev.bytebank.common.error.ApiException;
+import dev.bytebank.common.http.RemoteUnavailableException;
 import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
 import dev.bytebank.common.security.Role;
 import dev.bytebank.common.web.PageResponse;
 import dev.bytebank.transfers.client.AccountsClient;
 import dev.bytebank.transfers.client.AccountsClient.AccountInfo;
+import dev.bytebank.transfers.client.FraudClient;
 import dev.bytebank.transfers.transfer.TransferDtos.CreateTransferRequest;
 import dev.bytebank.transfers.transfer.TransferDtos.TransferResponse;
 
@@ -47,6 +49,8 @@ class TransferServiceTest {
     TransferRepository transfers;
     @Mock
     AccountsClient accounts;
+    @Mock
+    FraudClient fraud;
 
     @InjectMocks
     TransferService service;
@@ -58,6 +62,8 @@ class TransferServiceTest {
                 .thenReturn(new AccountInfo(ORIGIN, "ACTIVA", new BigDecimal("1000"), List.of(2L)));
         lenient().when(accounts.getAccount(DESTINATION))
                 .thenReturn(new AccountInfo(DESTINATION, "ACTIVA", new BigDecimal("100"), List.of(3L)));
+        lenient().when(fraud.check(anyString(), anyString(), any(), any()))
+                .thenReturn(new FraudClient.CheckResponse(1L, FraudClient.Verdict.APROBADA, List.of()));
     }
 
     @Test
@@ -174,6 +180,57 @@ class TransferServiceTest {
         assertThat(t.getStatus()).isEqualTo(TransferStatus.PENDIENTE);
         verify(accounts, never()).debit(anyString(), anyString(), any(), any());
         verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void fraudBlockedTransferIsRejectedWithoutMovingMoney() {
+        when(fraud.check(anyString(), anyString(), any(), any()))
+                .thenReturn(new FraudClient.CheckResponse(2L, FraudClient.Verdict.BLOQUEADA,
+                        List.of("IMPORTE_MAXIMO")));
+
+        Transfer t = service.create(
+                new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("21000.00"), null), ANA);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.RECHAZADA);
+        assertThat(t.getRejectionReason()).isEqualTo("IMPORTE_MAXIMO");
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void fraudReviewLeavesTransferPendingWithoutMovingMoney() {
+        when(fraud.check(anyString(), anyString(), any(), any()))
+                .thenReturn(new FraudClient.CheckResponse(3L, FraudClient.Verdict.REVISAR,
+                        List.of("EXTERNA_IMPORTE_ALTO")));
+
+        Transfer t = service.create(
+                new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("1500.00"), null), ANA);
+
+        assertThat(t.getStatus()).isEqualTo(TransferStatus.PENDIENTE);
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
+        verify(accounts, never()).credit(anyString(), anyString(), any(), any());
+    }
+
+    @Test
+    void sendsTheTransferDataToFraud() {
+        service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("100.00"), "Cena"), ANA);
+
+        verify(fraud).check(ORIGIN, DESTINATION, ANA.id(), new BigDecimal("100.00"));
+    }
+
+    @Test
+    void transferFailsWhenFraudServiceIsUnavailable() {
+        when(fraud.check(anyString(), anyString(), any(), any()))
+                .thenThrow(new RemoteUnavailableException("ms-fraud no responde"));
+
+        assertThatThrownBy(() -> service.create(
+                new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("100.00"), null), ANA))
+                .isInstanceOf(ApiException.class)
+                .extracting(e -> ((ApiException) e).getCode())
+                .isEqualTo("SERVICIO_NO_DISPONIBLE");
+
+        verify(transfers, never()).save(any());
+        verify(accounts, never()).debit(anyString(), anyString(), any(), any());
     }
 
     @Test
