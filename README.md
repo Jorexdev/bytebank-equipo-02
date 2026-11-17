@@ -102,10 +102,11 @@ Notas para quien coja el proyecto:
 
 - **ms-cards**: se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
   rechazados de negocio quedan en el historial. El contrato está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
-- **ms-fraud** funciona por su cuenta, pero ms-transfers todavía no lo llama. Falta también la regla de frecuencia.
-  Ver [docs/fraude.md](docs/fraude.md).
-- **ms-notifications** ya recibe los movimientos de Kafka y guarda los avisos, pero falta el endpoint para
-  consultarlos. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
+- **ms-fraud** está integrado en ms-transfers: cada transferencia se valida antes de ejecutarse y las tres reglas
+  acordadas (importe máximo, transferencia externa y frecuencia) están implementadas. Si ms-fraud no responde, la
+  operación se rechaza con 503. Ver [docs/fraude.md](docs/fraude.md).
+- **ms-notifications** recibe los movimientos de Kafka, guarda un aviso por titular y los clientes los consultan en
+  `GET /api/notifications`. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
 - Algunos clientes se han quejado del extracto de movimientos. No me ha dado tiempo a mirarlo.
 
 Raúl

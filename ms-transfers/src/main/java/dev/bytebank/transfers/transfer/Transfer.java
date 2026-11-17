@@ -36,7 +36,7 @@ public class Transfer {
     @Column(nullable = false)
     private TransferStatus status;
 
-    @Column(name = "rejection_reason", length = 40)
+    @Column(name = "rejection_reason", length = 255)
     private String rejectionReason;
 
     @Column(name = "created_by", nullable = false)
