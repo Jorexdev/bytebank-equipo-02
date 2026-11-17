@@ -21,6 +21,12 @@ public class NotificationService {
         this.notifications = notifications;
     }
 
+    /**
+     * Guarda un aviso por titular. Kafka entrega cada evento al menos una vez, así que el mismo movimiento puede
+     * llegar repetido: si un titular ya tiene el aviso de ese movimiento, no se guarda otro. La restricción única
+     * {@code (movement_id, user_id)} cubre el caso de dos entregas procesadas a la vez: una de ellas falla, se
+     * deshace entera y, al reintentarla, encuentra los avisos ya guardados.
+     */
     @Transactional
     public void notifyHolders(MovementEvent event) {
         if (event.holderIds() == null || event.holderIds().isEmpty()) {
@@ -28,6 +34,10 @@ public class NotificationService {
             return;
         }
         for (Long holderId : event.holderIds()) {
+            if (notifications.existsByMovementIdAndUserId(event.movementId(), holderId)) {
+                log.info("Movimiento {} ya avisado al usuario {}; se ignora la reentrega", event.movementId(), holderId);
+                continue;
+            }
             notifications.save(new Notification(holderId, event.movementId(), event.iban(), event.type(),
                     event.amount(), event.balanceAfter(), event.reference(),
                     NotificationMessages.of(event), event.createdAt()));
