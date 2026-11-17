@@ -4,22 +4,31 @@ import dev.bytebank.cards.client.AccountsClient;
 import dev.bytebank.cards.payment.CardPayment;
 import dev.bytebank.cards.payment.CardPaymentRepository;
 import dev.bytebank.common.error.ApiException;
+import dev.bytebank.common.http.RemoteUnavailableException;
 import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class CardService {
 
+    private static final Logger log = LoggerFactory.getLogger(CardService.class);
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Set<String> BUSINESS_REJECTIONS = Set.of("FONDOS_INSUFICIENTES", "CUENTA_NO_OPERATIVA");
 
     private final CardRepository cards;
     private final CardPaymentRepository payments;
@@ -71,9 +80,52 @@ public class CardService {
     }
 
     /** Cobra un pago con la tarjeta. Ver docs/contratos/ms-cards.md. */
+    @Transactional
     public CardPayment pay(Long id, BigDecimal amount, String merchant, AuthUser user) {
-        // TODO pendiente de implementar
-        throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "NO_IMPLEMENTADO", "Los pagos con tarjeta aún no están disponibles");
+        Card card = cards.findByIdForUpdate(id).orElseThrow(() -> notFound(id));
+        if (!card.getUserId().equals(user.id())) {
+            throw notFound(id);
+        }
+
+        String reference = "CARD-" + UUID.randomUUID();
+        CardPayment payment = new CardPayment(reference, card.getId(), amount, merchant, clock.instant());
+
+        if (!card.isActive()) {
+            payment.reject("TARJETA_BLOQUEADA");
+            return payments.save(payment);
+        }
+
+        Instant todayStart = LocalDate.now(clock.withZone(zone)).atStartOfDay(zone).toInstant();
+        BigDecimal spent = payments.sumApprovedAmountSince(card.getId(), todayStart);
+        if (spent.add(amount).compareTo(card.getDailyLimit()) > 0) {
+            payment.reject("LIMITE_DIARIO_SUPERADO");
+            return payments.save(payment);
+        }
+
+        try {
+            accountsClient.debit(reference, card.getAccountIban(), amount, "Pago en " + merchant);
+        } catch (RemoteUnavailableException e) {
+            throw e;
+        } catch (ApiException e) {
+            if (!BUSINESS_REJECTIONS.contains(e.getCode())) {
+                throw e;
+            }
+            payment.reject(e.getCode());
+            return payments.save(payment);
+        }
+
+        payment.approve();
+        try {
+            return payments.saveAndFlush(payment);
+        } catch (RuntimeException e) {
+            try {
+                accountsClient.credit(reference + "-REV", card.getAccountIban(), amount,
+                        "Reverso del pago " + reference);
+            } catch (RuntimeException reversalFailure) {
+                log.error("No se pudo revertir el pago {} después de fallar su guardado", reference, reversalFailure);
+            }
+            throw e;
+        }
     }
 
     public List<CardPayment> payments(Long id, AuthUser user) {

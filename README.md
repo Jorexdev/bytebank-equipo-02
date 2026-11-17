@@ -100,8 +100,8 @@ Si alguna de las comprobaciones falla, la ejecución global de la CI se marca co
 
 Notas para quien coja el proyecto:
 
-- **ms-cards**: se pueden listar, bloquear y emitir tarjetas; pagar sigue devolviendo 501.
-  El contrato acordado está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
+- **ms-cards**: se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
+  rechazados de negocio quedan en el historial. El contrato está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
 - **ms-fraud** está integrado en ms-transfers: cada transferencia se valida antes de ejecutarse y las tres reglas
   acordadas (importe máximo, transferencia externa y frecuencia) están implementadas. Si ms-fraud no responde, la
   operación se rechaza con 503. Ver [docs/fraude.md](docs/fraude.md).
