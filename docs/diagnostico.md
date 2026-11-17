@@ -513,6 +513,32 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Pendiente:** nada impide guardar dos veces el aviso de un mismo movimiento si Kafka reentrega el mensaje, aunque el contrato lo prohíbe. Queda para KAF-02 o KAF-03.
 
+### 4.16. TAR-01 — Pagar con tarjeta de débito
+
+**Estado:** implementado y verificado en el entorno local.
+
+**Impacto:** la emisión de tarjetas ya estaba hecha (4.13 de CAM-01), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
+
+**Corrección:**
+
+- El pago comprueba que la tarjeta es del usuario, que está activa y el límite diario, y después hace el cargo en ms-accounts con un movimiento `PAGO_TARJETA`.
+- Los rechazos (`TARJETA_BLOQUEADA`, `LIMITE_DIARIO_SUPERADO`, `FONDOS_INSUFICIENTES`, `CUENTA_NO_OPERATIVA`) se guardan y se devuelven con 201, para que queden en el historial.
+- El límite diario (600 € por defecto) cuenta solo los pagos aprobados desde las 00:00 de Madrid.
+- La fila de la tarjeta se bloquea durante el pago, para que dos pagos simultáneos no superen el límite.
+- Cada pago lleva una referencia única `CARD-<uuid>` (migración `V2` de ms-cards). Si falla el guardado después del cargo, se compensa con un abono.
+- Si ms-accounts no responde, se devuelve 503 y no se guarda el pago.
+
+**Verificación:**
+
+- `./mvnw clean verify`: 131 tests, 0 fallos. ms-cards pasa de 4 a 25 tests, incluidos los de integración con PostgreSQL.
+- Prueba por la API: 42,50 € y 557,50 € aprobados, con el día justo en 600 €; 0,01 € rechazado por `LIMITE_DIARIO_SUPERADO`; 200 € con 150,75 € de saldo, `FONDOS_INSUFICIENTES`; tarjeta bloqueada, `TARJETA_BLOQUEADA`; importe negativo, 400. El historial guarda los rechazados y solo los pagos aprobados generan aviso.
+
+**Límites:**
+
+- Si ms-accounts hace el cargo pero su respuesta no llega, el cliente recibe 503 y el pago no queda registrado. Tampoco se compensa si el proceso cae entre el cargo y el guardado.
+- La tarjeta queda bloqueada durante la llamada a ms-accounts: si tarda, los pagos de esa tarjeta esperan.
+- No hay idempotencia: si el cliente reintenta, es un pago nuevo.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
