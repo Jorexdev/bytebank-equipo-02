@@ -488,6 +488,31 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - La frecuencia se cuenta sobre `fraud_checks`, así que un intento fallido también acerca el bloqueo.
 - Dos peticiones simultáneas pueden leer el mismo historial y dejar pasar como mucho una operación extra; no hay bloqueo por cuenta.
 
+### 4.15. KAF-01 — Los clientes no pueden consultar sus avisos
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** ms-notifications recibía los movimientos de Kafka y guardaba un aviso por titular, pero `GET /api/notifications` respondía 501. El cliente no tenía forma de ver sus avisos.
+
+**Causa:** el endpoint estaba sin implementar (`TODO` en `NotificationController`), y el repositorio no tenía ninguna consulta por usuario.
+
+**Corrección:**
+
+- `GET /api/notifications` devuelve los avisos del usuario autenticado, los más recientes primero, con el formato de `docs/contratos/ms-notifications.md`.
+- El usuario se obtiene del token, nunca de un parámetro, de modo que nadie puede consultar los avisos de otro.
+- `page` desde 0 y `size` entre 1 y 100; fuera de rango responde 400.
+- El `Dockerfile` incluye `jdk.localedata` en el JRE recortado, limitado al español y al inglés. Sin ese módulo, Java no tenía los formatos del español y los importes de los avisos salían en formato inglés (`10.00 €`) en lugar de `10,00 €`. El fallo solo aparecía en Docker: los tests usan el JDK completo.
+
+**Verificación:**
+
+- Tests automáticos: nuevo test en `NotificationServiceTest` que comprueba que se piden los avisos del usuario y en orden descendente. ms-notifications: 5 tests, 0 fallos.
+- API: tras una transferencia de 10 € de Ana a Luis, Ana ve solo su `TRANSFERENCIA_EMITIDA` y Luis solo su `TRANSFERENCIA_RECIBIDA`; `size=101` y `page=-1` dan 400; sin token, 401.
+- Mensaje con el formato del contrato: «Has enviado 1.234,50 € desde tu cuenta ···0001 (Prueba formato). Saldo: 1.265,50 €».
+- Una transferencia rechazada por fondos insuficientes no genera aviso.
+- Tests automáticos: en `NotificationServiceTest`, un test comprueba que se piden los avisos del usuario y en orden descendente; `NotificationControllerTest` cubre el endpoint. ms-notifications: 12 tests, 0 fallos. `./mvnw clean verify`: 110 tests, 0 fallos.
+
+**Pendiente:** nada impide guardar dos veces el aviso de un mismo movimiento si Kafka reentrega el mensaje, aunque el contrato lo prohíbe. Queda para KAF-02 o KAF-03.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
