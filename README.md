@@ -100,8 +100,8 @@ Si alguna de las comprobaciones falla, la ejecución global de la CI se marca co
 
 Notas para quien coja el proyecto:
 
-- **ms-cards**: se pueden listar, bloquear y emitir tarjetas; pagar sigue devolviendo 501.
-  El contrato acordado está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
+- **ms-cards**: se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
+  rechazados de negocio quedan en el historial. El contrato está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
 - **ms-fraud** funciona por su cuenta, pero ms-transfers todavía no lo llama. Falta también la regla de frecuencia.
   Ver [docs/fraude.md](docs/fraude.md).
 - **ms-notifications** ya recibe los movimientos de Kafka y guarda los avisos, pero falta el endpoint para
