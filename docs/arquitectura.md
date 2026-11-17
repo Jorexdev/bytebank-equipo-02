@@ -55,11 +55,17 @@ Todos los servicios devuelven los errores así:
 ## Flujo de una transferencia
 
 1. El cliente hace `POST /api/transfers` con origen, destino, importe y concepto.
-2. ms-transfers comprueba los datos y registra la transferencia.
-3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
-4. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
-5. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
-6. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
+2. ms-transfers comprueba los datos y que la cuenta de origen pertenezca al cliente.
+3. Envía la operación a ms-fraud (`POST /internal/fraud/check`).
+4. Si el veredicto es `BLOQUEADA`, la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado y no se mueve dinero.
+5. Si el veredicto es `REVISAR`, queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
+6. Si el veredicto es `APROBADA`, sigue el flujo normal. Si el importe supera los 5.000 €, también queda `PENDIENTE` por la regla de CAM-02.
+7. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
+8. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
+9. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
+
+Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve
+dinero. La aprobación de un gestor no repite la validación antifraude.
 
 Las transferencias a otras entidades solo cargan en origen: la liquidación con el otro banco queda fuera de este sistema.
 
