@@ -55,7 +55,7 @@ public class CardPayment {
     }
 
     public String ledgerReference() {
-        return "CARD-" + id;
+        return reference != null ? reference : "CARD-" + id;
     }
 
     public void approve() {

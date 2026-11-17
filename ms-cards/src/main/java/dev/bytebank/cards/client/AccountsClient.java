@@ -42,16 +42,16 @@ public class AccountsClient {
     }
 
     public LedgerResult debit(String reference, String iban, BigDecimal amount, String concept) {
-        return post(new MovementRequest(reference, iban, amount, "PAGO_TARJETA", concept));
+        return post("/internal/accounts/debit", new MovementRequest(reference, iban, amount, "PAGO_TARJETA", concept));
     }
 
     public LedgerResult credit(String reference, String iban, BigDecimal amount, String concept) {
-        return post(new MovementRequest(reference, iban, amount, "INGRESO", concept));
+        return post("/internal/accounts/credit", new MovementRequest(reference, iban, amount, "INGRESO", concept));
     }
 
-    private LedgerResult post(MovementRequest request) {
+    private LedgerResult post(String path, MovementRequest request) {
         return InternalClients.call(() -> client.post()
-                .uri("/internal/accounts/" + ("INGRESO".equals(request.type()) ? "credit" : "debit"))
+                .uri(path)
                 .body(request)
                 .retrieve()
                 .body(LedgerResult.class));

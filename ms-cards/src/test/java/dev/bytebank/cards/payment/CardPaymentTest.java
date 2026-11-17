@@ -15,5 +15,6 @@ class CardPaymentTest {
                 Instant.parse("2026-11-16T10:00:00Z"));
 
         assertThat(payment.getReference()).isEqualTo("CARD-abc");
+        assertThat(payment.ledgerReference()).isEqualTo("CARD-abc");
     }
 }

@@ -17,8 +17,8 @@ import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
@@ -160,6 +160,23 @@ class CardServiceTest {
         CardPayment payment = service.pay(1L, new BigDecimal("10.00"), "Supermercado", ANA);
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.APROBADO);
+    }
+
+    @Test
+    void calculatesDailyLimitFromMadridMidnight() throws Exception {
+        Card card = card(1L, CardStatus.ACTIVA);
+        locked(card);
+        Instant now = Instant.parse("2026-11-16T22:30:00Z");
+        service = new CardService(cards, payments, accountsClient, Clock.fixed(now, ZoneId.of("UTC")),
+                "Europe/Madrid", new BigDecimal("600.00"));
+        when(payments.sumApprovedAmountSince(eq(1L), eq(Instant.parse("2026-11-15T23:00:00Z"))))
+                .thenReturn(BigDecimal.ZERO);
+
+        CardPayment payment = service.pay(1L, new BigDecimal("42.50"), "Supermercado", ANA);
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.APROBADO);
+        verify(payments).sumApprovedAmountSince(1L,
+                LocalDate.of(2026, 11, 16).atStartOfDay(ZoneId.of("Europe/Madrid")).toInstant());
     }
 
     @Test
