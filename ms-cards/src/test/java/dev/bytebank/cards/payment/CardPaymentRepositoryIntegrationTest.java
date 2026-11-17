@@ -4,6 +4,7 @@ import dev.bytebank.cards.card.Card;
 import dev.bytebank.cards.card.CardRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -39,6 +40,7 @@ class CardPaymentRepositoryIntegrationTest {
     private final CardPaymentRepository payments;
     private final TransactionTemplate transactions;
 
+    @Autowired
     CardPaymentRepositoryIntegrationTest(CardRepository cards, CardPaymentRepository payments,
                                          PlatformTransactionManager transactionManager) {
         this.cards = cards;
