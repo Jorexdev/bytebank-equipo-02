@@ -45,6 +45,17 @@ class NotificationServiceTest {
     }
 
     @Test
+    void skipsHoldersAlreadyNotifiedOfTheMovement() {
+        when(notifications.existsByMovementIdAndUserId(1L, 2L)).thenReturn(true);
+
+        service.notifyHolders(event(List.of(2L, 3L)));
+
+        var saved = ArgumentCaptor.forClass(Notification.class);
+        verify(notifications).save(saved.capture());
+        assertThat(saved.getValue().getUserId()).isEqualTo(3L);
+    }
+
+    @Test
     void ignoresEventWithoutHolders() {
         service.notifyHolders(event(null));
 

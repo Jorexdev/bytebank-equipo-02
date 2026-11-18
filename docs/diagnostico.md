@@ -511,7 +511,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Una transferencia rechazada por fondos insuficientes no genera aviso.
 - Tests automáticos: en `NotificationServiceTest`, un test comprueba que se piden los avisos del usuario y en orden descendente; `NotificationControllerTest` cubre el endpoint. ms-notifications: 12 tests, 0 fallos. `./mvnw clean verify`: 110 tests, 0 fallos.
 
-**Pendiente:** nada impide guardar dos veces el aviso de un mismo movimiento si Kafka reentrega el mensaje, aunque el contrato lo prohíbe. Queda para KAF-02 o KAF-03.
+**Pendiente:** nada impide guardar dos veces el aviso de un mismo movimiento si Kafka reentrega el mensaje, aunque el contrato lo prohíbe. Resuelto en KAF-03 (ver 4.17).
 
 ### 4.16. TAR-01 — Pagar con tarjeta de débito
 
@@ -538,6 +538,32 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Si ms-accounts hace el cargo pero su respuesta no llega, el cliente recibe 503 y el pago no queda registrado. Tampoco se compensa si el proceso cae entre el cargo y el guardado.
 - La tarjeta queda bloqueada durante la llamada a ms-accounts: si tarda, los pagos de esa tarjeta esperan.
 - No hay idempotencia: si el cliente reintenta, es un pago nuevo.
+
+### 4.17. KAF-03 — Avisos repetidos tras reiniciar ms-notifications
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** después de reiniciar ms-notifications, varios clientes volvieron a recibir avisos de movimientos antiguos. El contrato dice que un cliente no recibe dos veces el aviso del mismo movimiento.
+
+**Causa:**
+
+- Kafka entrega cada evento **al menos una vez**. Spring Kafka confirma los offsets por lotes, después de procesarlos; si el servicio se para con mensajes ya procesados pero sin confirmar, al arrancar se vuelven a entregar. Con `auto-offset-reset: earliest`, si el grupo `ms-notifications` pierde sus offsets (caducan o cambia el `group-id`), se vuelve a leer el topic desde el principio.
+- ms-notifications guardaba un aviso por cada entrega sin comprobar si ya existía, y la tabla `notifications` no tenía ninguna restricción que lo impidiera.
+
+**Corrección:**
+
+- `NotificationService.notifyHolders` comprueba, por cada titular, si ya tiene el aviso de ese movimiento; si lo tiene, ignora la reentrega. Si un evento llega con parte de los avisos ya guardados, solo se añaden los que faltan.
+- Migración `V2__notifications_unique_movement_user.sql`: restricción única `(movement_id, user_id)`. Es la garantía final: si dos entregas del mismo evento se procesan a la vez, una falla, su transacción se deshace entera y, al reintentarla, encuentra los avisos ya guardados.
+- La misma migración borra los avisos duplicados que ya existían, conservando el más antiguo de cada movimiento y titular.
+- No se cambia la configuración del consumidor: las reentregas son parte del funcionamiento normal de Kafka y es el consumidor el que debe ser idempotente. Esto también es necesario para KAF-02 (outbox), que puede publicar un evento más de una vez.
+
+**Verificación:**
+
+- `NotificationDeduplicationTest` (PostgreSQL real con Testcontainers): el mismo evento entregado dos veces genera un solo aviso por titular; una reentrega con parte de los avisos guardados solo añade los que faltan; dos movimientos distintos generan dos avisos; la base de datos rechaza un aviso duplicado. Antes de la corrección fallaban 3 de los 4 tests.
+- `NotificationServiceTest`: el titular que ya tiene el aviso no recibe otro.
+- Migración probada sobre una base con duplicados: de 5 avisos quedan 3 (el más antiguo de cada par) y un duplicado posterior se rechaza.
+- ms-notifications: 17 tests, 0 fallos. `./mvnw clean verify`: 115 tests, 0 fallos.
+- Entorno (Docker Compose): ms-notifications aplica la migración V2 al arrancar. Con el servicio parado, se reinician los offsets del grupo `ms-notifications` al principio del topic (`--reset-offsets --to-earliest`) y se vuelve a arrancar: se releen todos los movimientos, el número de avisos no cambia (4) y no hay ningún par movimiento-titular repetido. El log muestra «ya avisado … se ignora la reentrega» por cada evento releído.
 
 ## 5. Funcionalidades incompletas identificadas
 
