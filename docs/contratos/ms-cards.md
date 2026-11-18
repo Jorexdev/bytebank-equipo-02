@@ -46,6 +46,10 @@ Respuesta `201`:
     `CUENTA_NO_OPERATIVA`).
 - Un pago aprobado genera un movimiento `PAGO_TARJETA` en la cuenta.
 - Los pagos rechazados también se guardan, para que el cliente los vea en su historial.
+- Si ms-accounts no responde o devuelve un error de infraestructura, la API responde `503 SERVICIO_NO_DISPONIBLE` y
+  no se guarda el intento, porque no se puede saber si el débito llegó a aplicarse.
+- Los errores de negocio `FONDOS_INSUFICIENTES` y `CUENTA_NO_OPERATIVA` sí se guardan como pagos rechazados y se
+  devuelven en la respuesta `201`.
 
 Respuesta `201`, tanto si se aprueba como si se rechaza:
 

@@ -79,6 +79,21 @@ cliente por su email con `POST /api/accounts/{iban}/holders`.
 - La relación vive en `account_holders`; `accounts` ya no guarda `owner_id`.
 - `GET /api/accounts/{iban}/holders` devuelve los datos de los titulares.
 
+## Pagos con tarjeta
+
+`ms-cards` serializa los pagos de una misma tarjeta bloqueando su fila antes de consultar el límite diario y debitar la
+cuenta. El límite cuenta únicamente pagos aprobados desde las 00:00 de `Europe/Madrid`; los pagos rechazados también
+se guardan en el historial, pero no consumen límite.
+
+- Cada intento recibe una referencia interna `CARD-<uuid>`, que también se guarda en `card_payments` para rastrear el
+  movimiento en `ms-accounts`.
+- Un pago aprobado se debita mediante `POST /internal/accounts/debit` con tipo `PAGO_TARJETA`.
+- `FONDOS_INSUFICIENTES` y `CUENTA_NO_OPERATIVA` son rechazos de negocio y se guardan. Si `ms-accounts` no responde,
+  se devuelve `503 SERVICIO_NO_DISPONIBLE` y no se guarda el intento.
+- Si el débito tiene éxito pero falla el guardado local, se intenta compensar con un crédito `INGRESO` usando la
+  referencia `<referencia>-REV`. El concepto identifica el pago original para que el movimiento sea trazable.
+- No hay idempotencia de pagos: un reintento del cliente representa otro intento.
+
 ## Roles
 
 | Rol | Puede |

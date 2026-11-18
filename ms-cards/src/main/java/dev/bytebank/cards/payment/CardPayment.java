@@ -24,6 +24,9 @@ public class CardPayment {
     @Column(name = "card_id", nullable = false)
     private Long cardId;
 
+    @Column(nullable = false, unique = true, length = 64)
+    private String reference;
+
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
@@ -43,7 +46,8 @@ public class CardPayment {
     protected CardPayment() {
     }
 
-    public CardPayment(Long cardId, BigDecimal amount, String merchant, Instant createdAt) {
+    public CardPayment(String reference, Long cardId, BigDecimal amount, String merchant, Instant createdAt) {
+        this.reference = reference;
         this.cardId = cardId;
         this.amount = amount;
         this.merchant = merchant;
@@ -51,7 +55,7 @@ public class CardPayment {
     }
 
     public String ledgerReference() {
-        return "CARD-" + id;
+        return reference != null ? reference : "CARD-" + id;
     }
 
     public void approve() {
@@ -70,6 +74,10 @@ public class CardPayment {
 
     public Long getCardId() {
         return cardId;
+    }
+
+    public String getReference() {
+        return reference;
     }
 
     public BigDecimal getAmount() {

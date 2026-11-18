@@ -28,10 +28,32 @@ public class AccountsClient {
         }
     }
 
+    public record MovementRequest(String reference, String iban, BigDecimal amount, String type, String concept) {
+    }
+
+    public record LedgerResult(String reference, BigDecimal balanceAfter) {
+    }
+
     public AccountInfo getAccount(String iban) {
         return InternalClients.call(() -> client.get()
                 .uri("/internal/accounts/{iban}", iban)
                 .retrieve()
                 .body(AccountInfo.class));
+    }
+
+    public LedgerResult debit(String reference, String iban, BigDecimal amount, String concept) {
+        return post("/internal/accounts/debit", new MovementRequest(reference, iban, amount, "PAGO_TARJETA", concept));
+    }
+
+    public LedgerResult credit(String reference, String iban, BigDecimal amount, String concept) {
+        return post("/internal/accounts/credit", new MovementRequest(reference, iban, amount, "INGRESO", concept));
+    }
+
+    private LedgerResult post(String path, MovementRequest request) {
+        return InternalClients.call(() -> client.post()
+                .uri(path)
+                .body(request)
+                .retrieve()
+                .body(LedgerResult.class));
     }
 }
