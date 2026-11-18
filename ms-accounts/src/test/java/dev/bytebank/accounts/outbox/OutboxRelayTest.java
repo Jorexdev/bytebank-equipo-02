@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.kafka.KafkaException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
@@ -106,6 +107,22 @@ class OutboxRelayTest {
 
         verifyNoInteractions(kafka);
     }
+
+    @Test
+    void kafkaThatFailsImmediatelyCountsAsAFailure() {
+        when(outbox.findPendingForUpdate(BATCH_SIZE)).thenReturn(List.of(first, second));
+        when(kafka.send(TOPIC, "ES01", "{\"movementId\":1}")).thenThrow(new KafkaException("Send failed",
+                new org.apache.kafka.common.errors.TimeoutException(
+                        "Topic bytebank.movements not present in metadata after 5000 ms.")));
+
+        relay.publishPending();
+
+        assertThat(first.getPublishedAt()).isNull();
+        assertThat(first.getAttempts()).isEqualTo(1);
+        assertThat(first.getLastError()).contains("not present in metadata");
+        verify(kafka, never()).send(TOPIC, "ES01", "{\"movementId\":2}");
+    }
+
 
     private static CompletableFuture<SendResult<String, String>> ok() {
         return CompletableFuture.completedFuture(null);

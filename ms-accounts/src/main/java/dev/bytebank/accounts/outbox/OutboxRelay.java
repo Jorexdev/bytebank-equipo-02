@@ -66,7 +66,7 @@ public class OutboxRelay {
             Thread.currentThread().interrupt();
             event.markFailed("Interrumpido mientras se publicaba");
             return false;
-        } catch (ExecutionException | TimeoutException e) {
+        } catch (ExecutionException | TimeoutException  | RuntimeException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             event.markFailed(cause.toString());
             log.warn("No se ha podido publicar el evento {} del outbox (intento {}): {}",

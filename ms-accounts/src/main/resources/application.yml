@@ -34,7 +34,7 @@ bytebank:
   outbox:
     relay-delay-ms: 1000
     batch-size: 100
-    send-timeout-ms: 10000
+    send-timeout-ms: 12000  # mayor que delivery.timeout.ms (10000)
     retention-days: 3
     cleanup-cron: "0 0 4 * * *"
 
