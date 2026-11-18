@@ -120,7 +120,7 @@ CREATE INDEX idx_accounts_owner ON accounts (owner_id);
 
 **Verificación:** con el entorno levantado, Flyway aplica la versión 3 sin errores, `ms-accounts` arranca, la consulta de cuentas responde y las pruebas funcionales del Gateway se ejecutan con normalidad.
 
-**Pendiente:** repetir la ejecución de `LedgerServiceIntegrationTest` y confirmar el resultado en CI.
+**Pendiente:** confirmar el resultado en CI. En local, `LedgerServiceIntegrationTest` ya se ejecuta sin errores (5 tests, 0 fallos).
 
 ### 4.2. Puerto incorrecto en la comunicación entre Gateway y autenticación
 
@@ -315,13 +315,12 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Corrección:** la cuenta se bloquea mientras se hace el cargo o el abono (`SELECT ... FOR UPDATE`). Las operaciones sobre la misma cuenta se atienden de una en una, así que cada una ve el saldo actualizado y la que no tiene fondos se rechaza con `FONDOS_INSUFICIENTES`.
 
-El ingreso en ventanilla (AccountService.deposit) usa el mismo bloqueo, porque también modifica el saldo.
+El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque también modifica el saldo.
 
 **Verificación:**
 
 - Prueba por la API: cuenta con 100 € y 4 transferencias de 30 € lanzadas a la vez. Resultado: 3 `COMPLETADA`, 1 `RECHAZADA` con `FONDOS_INSUFICIENTES`; saldo final 10 € y solo 3 movimientos.
 - Test de integración: el mismo caso con 4 débitos simultáneos. Sin el bloqueo el test falla porque pasan los 4.
-
 - Test de integración de ingresos: 5 ingresos simultáneos de 10 € sobre una cuenta vacía. Sin el bloqueo el saldo final era 10 €; con él es 50 €.
 
 ### 4.11. CAM-02 — Transferencias de más de 5.000 € pendientes de aprobación
@@ -374,16 +373,16 @@ Los dos fallos entraron en commits del equipo anterior, en junio de 2026:
 
 **Resultado de la auditoría:**
 
-| Hallazgo | ¿Es un secreto? | Decisión |
-| --- | --- | --- |
-| `JWT_SECRET` en `SecurityConstants` | Sí | Corregido |
-| Contraseña en claro en el log de login | Sí (dato del usuario) | Corregido |
+| Hallazgo                                                           | ¿Es un secreto?                                                 | Decisión                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| `JWT_SECRET` en `SecurityConstants`                                | Sí                                                              | Corregido                                                      |
+| Contraseña en claro en el log de login                             | Sí (dato del usuario)                                           | Corregido                                                      |
 | Contraseñas de los usuarios de demostración (`DemoSeeder`, README) | No: datos de prueba del perfil `demo`, documentados a propósito | No se cambian. Se corrige la activación por defecto del perfil |
-| Clave interna y secreto JWT de los tests | No: solo existen en los tests | Sin cambios |
-| Valores de `.env.example` | No: marcadores de relleno | Sin cambios |
-| `DB_PASSWORD` e `INTERNAL_KEY` | Sí, pero ya llegaban por variable de entorno | Correcto, sin cambios |
-| Fichero `.env` | Sí, pero está en `.gitignore` y nunca se ha subido | Correcto, sin cambios |
-| Workflow de CI | No contiene secretos | Sin cambios |
+| Clave interna y secreto JWT de los tests                           | No: solo existen en los tests                                   | Sin cambios                                                    |
+| Valores de `.env.example`                                          | No: marcadores de relleno                                       | Sin cambios                                                    |
+| `DB_PASSWORD` e `INTERNAL_KEY`                                     | Sí, pero ya llegaban por variable de entorno                    | Correcto, sin cambios                                          |
+| Fichero `.env`                                                     | Sí, pero está en `.gitignore` y nunca se ha subido              | Correcto, sin cambios                                          |
+| Workflow de CI                                                     | No contiene secretos                                            | Sin cambios                                                    |
 
 **Correcciones aplicadas:**
 
@@ -402,12 +401,12 @@ No se ha reescrito el historial de git. Reescribirlo obligaría a forzar el push
 
 **Pruebas automatizadas:**
 
-| Clase de prueba | Módulo | Tests | Qué comprueba |
-| --- | --- | ---: | --- |
-| `JwtVerifierTest` | `common` | 5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con cualquier otro secreto, los manipulados, los caducados y el texto que no es un token |
-| `BytebankPropertiesTest` | `common` | 8 | La configuración se rechaza si el secreto es corto, está en blanco o falta, si falta la clave interna, o si la caducidad es cero o negativa |
-| `JwtIssuerTest` | `ms-auth` | 4 | El token emitido se valida con el mismo secreto y se rechaza con otro. Caducidad de 60 minutos por defecto |
-| `AuthDtosTest` | `ms-auth` | 3 | El `toString()` de los DTOs no muestra la contraseña |
+| Clase de prueba          | Módulo    | Tests | Qué comprueba                                                                                                                                                    |
+| ------------------------ | --------- | ----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JwtVerifierTest`        | `common`  |     5 | Acepta tokens firmados con el secreto configurado. Rechaza los firmados con cualquier otro secreto, los manipulados, los caducados y el texto que no es un token |
+| `BytebankPropertiesTest` | `common`  |     8 | La configuración se rechaza si el secreto es corto, está en blanco o falta, si falta la clave interna, o si la caducidad es cero o negativa                      |
+| `JwtIssuerTest`          | `ms-auth` |     4 | El token emitido se valida con el mismo secreto y se rechaza con otro. Caducidad de 60 minutos por defecto                                                       |
+| `AuthDtosTest`           | `ms-auth` |     3 | El `toString()` de los DTOs no muestra la contraseña                                                                                                             |
 
 El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los tests: para comprobar que una firma incorrecta se rechaza basta con usar cualquier secreto distinto del configurado.
 
@@ -505,7 +504,6 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Verificación:**
 
-- Tests automáticos: nuevo test en `NotificationServiceTest` que comprueba que se piden los avisos del usuario y en orden descendente. ms-notifications: 5 tests, 0 fallos.
 - API: tras una transferencia de 10 € de Ana a Luis, Ana ve solo su `TRANSFERENCIA_EMITIDA` y Luis solo su `TRANSFERENCIA_RECIBIDA`; `size=101` y `page=-1` dan 400; sin token, 401.
 - Mensaje con el formato del contrato: «Has enviado 1.234,50 € desde tu cuenta ···0001 (Prueba formato). Saldo: 1.265,50 €».
 - Una transferencia rechazada por fondos insuficientes no genera aviso.
@@ -517,7 +515,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Estado:** implementado y verificado en el entorno local.
 
-**Impacto:** la emisión de tarjetas ya estaba hecha (4.13 de CAM-01), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
+**Impacto:** la emisión de tarjetas ya estaba hecha (CAM-01), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
 
 **Corrección:**
 
@@ -565,6 +563,41 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - ms-notifications: 17 tests, 0 fallos. `./mvnw clean verify`: 115 tests, 0 fallos.
 - Entorno (Docker Compose): ms-notifications aplica la migración V2 al arrancar. Con el servicio parado, se reinician los offsets del grupo `ms-notifications` al principio del topic (`--reset-offsets --to-earliest`) y se vuelve a arrancar: se releen todos los movimientos, el número de avisos no cambia (4) y no hay ningún par movimiento-titular repetido. El log muestra «ya avisado … se ignora la reentrega» por cada evento releído.
 
+### 4.18. KAF-02 — Avisos de operaciones que no han llegado a hacerse
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** un cliente podía recibir el aviso de un movimiento que no existe. ms-accounts enviaba el evento a Kafka dentro de la transacción, antes del commit: si la operación se deshacía después, el aviso ya había salido. Con transferencias atómicas (cargo y abono en una sola transacción) habría pasado siempre que fallara el abono. Además, si Kafka fallaba, el aviso se perdía sin dejar rastro.
+
+**Causa:** `MovementPublisher` llamaba a `kafka.send` desde `LedgerService.debit`, `LedgerService.credit` y `AccountService.deposit`, todos `@Transactional`. El envío no esperaba la confirmación de Kafka, y un error al serializar solo se registraba en el log.
+
+**Corrección (patrón transactional outbox):**
+
+- Migración `V6__outbox_events.sql`: tabla `outbox_events` con índices parciales para los pendientes y para la limpieza.
+- `MovementPublisher` ya no usa Kafka: guarda el evento en el outbox en la misma transacción que el movimiento (`Propagation.MANDATORY`, así que no se puede llamar sin transacción). Si la operación se deshace, el evento desaparece con ella. Un error al serializar deshace la operación.
+- `OutboxRelay` publica los pendientes cada segundo, en orden, con `FOR UPDATE SKIP LOCKED`. Solo marca un evento como publicado cuando Kafka lo confirma. Si un envío falla, por cualquier motivo, se queda pendiente con `attempts` y `last_error`, la vuelta se para para no alterar el orden, y se reintenta en la siguiente.
+- `OutboxCleaner` borra cada día a las 04:00 (Europe/Madrid) los eventos publicados hace más de 3 días; los pendientes no se borran nunca. El outbox es una tabla temporal, no un histórico: 3 días bastan para investigar una incidencia de fin de semana, y el histórico de movimientos y de avisos se conserva en las tablas `movements` (ms-accounts) y `notifications` (ms-notifications).
+- Productor de Kafka con `acks: all`, idempotencia y tiempos de espera acotados (`max.block.ms`, `delivery.timeout.ms`). La espera del relay (12 s) es mayor que la del productor (10 s), para que el fallo registrado sea siempre el definitivo y no quede en el productor una copia del evento que se envíe además del reintento.
+- La entrega pasa a ser **al menos una vez**: si ms-accounts cae entre la confirmación de Kafka y el commit, el evento se reenvía. ms-notifications ignora los repetidos (KAF-03, 4.17). Queda documentado en el contrato.
+- ms-cards (pagos con tarjeta) y ms-transfers no cambian: sus movimientos pasan por `LedgerService` y usan el outbox.
+
+**Verificación:**
+
+- `MovementEventPublicationTest` (PostgreSQL y Kafka reales): un movimiento deshecho no deja evento ni mensaje; una transferencia atómica simulada que falla en el abono no publica el cargo; un movimiento confirmado se guarda en el outbox y llega a Kafka; llamar al publicador sin transacción lanza `IllegalTransactionStateException`. Antes de la corrección, los dos primeros fallaban mostrando el aviso fantasma.
+- `OutboxRelayTest`: Kafka con error, sin respuesta o con un fallo inmediato en `send()` deja el evento pendiente y registra el intento; el evento siguiente no se adelanta; en la siguiente vuelta se publica.
+- `OutboxCleanerTest`: se borra el publicado hace 4 días; se conservan el publicado hace 2 días y el pendiente de hace 30.
+- ms-accounts: 55 tests, 0 fallos. `./mvnw clean verify`: 147 tests, 0 fallos (ejecutado antes de añadir el test de fallo inmediato).
+- Entorno (Docker Compose):
+  - Con Kafka funcionando: una transferencia de 11 € genera dos eventos (cargo y abono), que se publican en menos de 2 s (el primer envío tras el arranque; después, en torno a 1 s). Ana recibe «Has enviado 11,00 €» y Luis «Has recibido 11,00 €».
+  - Con Kafka parado: la transferencia responde `COMPLETADA` en menos de 1 s. Sus eventos quedan pendientes: el primero con los intentos fallidos y el error registrados, el segundo sin intentar para no adelantarlo. Al arrancar Kafka, los dos se publican solos y en orden, el error se limpia y cada aviso llega una sola vez.
+  - Las pruebas con Kafka parado revelaron que un envío puede fallar de tres formas según el estado del productor: en la respuesta de Kafka (`TimeoutException`), o de forma inmediata en `send()` si no tiene los metadatos del topic (`Topic ... not present in metadata`) o si ni siquiera puede resolver el broker (`ConfigException: No resolvable bootstrap urls`). En los dos últimos casos el relay no registraba el intento: la transacción se deshacía y `attempts` y `last_error` quedaban vacíos. El evento no se perdía, pero el fallo no quedaba registrado. Se corrigió capturando cualquier excepción del envío y se añadió el test `kafkaThatFailsImmediatelyCountsAsAFailure`. Repetida la prueba, el evento acumuló 10 intentos en 15 s con el error registrado y se publicó al volver Kafka.
+
+**Pendiente:**
+
+- El caso del rollback no se puede provocar desde la API; está cubierto por los tests de integración.
+- La espera de 12 s del relay solo actúa cuando Kafka acepta el envío y no responde. En el entorno no se ha llegado a provocar; está cubierta por `OutboxRelayTest`.
+- Con Kafka caído y un fallo inmediato, el relay reintenta cada segundo y escribe un aviso en el log por intento. Si las caídas largas son un problema, convendría un backoff exponencial según `attempts`.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
@@ -580,6 +613,8 @@ El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las
 Estas limitaciones están documentadas por el equipo anterior, pero deben verificarse con pruebas durante el desarrollo.
 
 Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.8 y 4.9.
+
+**Actualización:** ms-cards ya permite emitir tarjetas (CAM-01) y pagar con ellas (TAR-01, 4.16), y ms-notifications tiene el endpoint para consultar los avisos (KAF-01, 4.15).
 
 ## 6. Pruebas y cobertura inicial
 
@@ -650,11 +685,11 @@ Los siguientes puntos requieren una revisión específica:
 - **Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
 - **Alta de gestores:** el único sitio del código que crea un usuario con rol `GESTOR` es el seeder del perfil `demo`, que usa una contraseña pública. El registro crea siempre usuarios `CLIENTE` y no existe ningún endpoint para dar de alta gestores. Si un entorno con datos reales se inicializara con el perfil `demo`, quedaría un gestor con contraseña conocida y acceso a todas las cuentas. En SEG-02 se ha evitado que el perfil se active por defecto, pero falta un mecanismo de alta de gestores que no dependa de la demo.
 - **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
-- **Transferencias:** verificar que los importes negativos, los redondeos y los errores durante una operación no provoquen alteraciones incorrectas de saldos.
-- **Concurrencia:** comprobar que las operaciones simultáneas no permitan saldos inconsistentes.
+- **Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos. Queda verificar los redondeos.
+- **Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
 - **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
-- **Kafka:** comprobar que los eventos solo se publiquen cuando la operación correspondiente se haya confirmado y que los consumidores gestionen correctamente los mensajes repetidos.
-- **Notificaciones:** verificar la persistencia y consulta de avisos, así como su idempotencia.
+- **Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
+- **Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
 - **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.
 - **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
 - **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
