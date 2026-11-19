@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Import;
 
 @AutoConfiguration
 @EnableConfigurationProperties(BytebankProperties.class)
-@Import({SecurityConfig.class, JwtVerifier.class, GlobalExceptionHandler.class, InternalClients.class})
+@Import({ SecurityConfig.class, JwtVerifier.class, GlobalExceptionHandler.class, InternalClients.class,
+        DemoProfileGuard.class })
 public class CommonAutoConfiguration {
 }
