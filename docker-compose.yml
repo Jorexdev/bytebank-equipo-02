@@ -81,6 +81,9 @@ services:
     environment:
       <<: *common-env
       DB_URL: jdbc:postgresql://postgres:5432/auth_db
+      # SEG-03: primer gestor de un entorno real. Vacías si no están en el .env (entonces no se crea nada).
+      BOOTSTRAP_GESTOR_EMAIL: ${BOOTSTRAP_GESTOR_EMAIL:-}
+      BOOTSTRAP_GESTOR_PASSWORD: ${BOOTSTRAP_GESTOR_PASSWORD:-}
 
   ms-accounts:
     <<: *service
