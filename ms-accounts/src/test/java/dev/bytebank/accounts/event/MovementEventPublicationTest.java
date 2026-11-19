@@ -124,7 +124,7 @@ class MovementEventPublicationTest extends IntegrationTest {
     }
 
     private static MovementRequest request(String iban, MovementType type) {
-        return new MovementRequest("TRF-KAF02", iban, new BigDecimal("10.00"), type, null);
+        return new MovementRequest("TRF-KAF02", iban, new BigDecimal("10.00"), type, null, null);
     }
 
     /** Lee el topic desde el principio durante WAIT y devuelve solo los mensajes de esa cuenta. */
