@@ -63,13 +63,22 @@ class DemoHoldersControllerTest extends IntegrationTest {
                 .andExpect(jsonPath("$.code").value("BASE_NO_DEMO"));
     }
 
+        @Test
+    void isNotReadyWhileTheDemoUsersDoNotExistYet() throws Exception {
+        jdbc.update("delete from users"); // ms-auth recién arrancado: su DemoSeeder todavía no ha terminado
+
+        mockMvc.perform(get(URL).header(InternalKeyFilter.HEADER, INTERNAL_KEY))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DEMO_NO_PREPARADA"));
+    }
+
     @Test
-    void refusesWhenADemoHolderIsMissing() throws Exception {
+    void isNotReadyWhileADemoHolderIsMissing() throws Exception {
         jdbc.update("delete from users where email = 'luis@bytebank.test'");
 
         mockMvc.perform(get(URL).header(InternalKeyFilter.HEADER, INTERNAL_KEY))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("BASE_NO_DEMO"));
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("DEMO_NO_PREPARADA"));
     }
 
     @Test
