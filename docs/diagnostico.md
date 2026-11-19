@@ -598,6 +598,37 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - La espera de 12 s del relay solo actúa cuando Kafka acepta el envío y no responde. En el entorno no se ha llegado a provocar; está cubierta por `OutboxRelayTest`.
 - Con Kafka caído y un fallo inmediato, el relay reintenta cada segundo y escribe un aviso en el log por intento. Si las caídas largas son un problema, convendría un backoff exponencial según `attempts`.
 
+### 4.19. SOR-01 — Comisión en transferencias a otras entidades
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:** las transferencias a otras entidades no cobraban comisión. Ahora se aplica un 0,5 % del importe con un mínimo de 1,00 €, redondeado a céntimos. Las transferencias entre cuentas de ByteBank siguen sin comisión. La comisión se cobra en la cuenta de origen como movimiento aparte de tipo `COMISION` y la respuesta de la transferencia incluye el campo `fee`. Si el saldo no cubre el importe más la comisión, la transferencia se rechaza sin mover dinero.
+
+**Corrección:**
+
+- `Transfer.fee()` calcula la comisión con el importe y el IBAN de destino: 0,5 %, mínimo 1,00 €, redondeo `HALF_UP` a dos decimales. Si el destino es de ByteBank, devuelve cero.
+- `TransferResponse` incluye `fee`. Las transferencias rechazadas devuelven `0.00`.
+- `POST /internal/accounts/debit` acepta un `fee` opcional; si falta, vale cero, así que ms-cards no cambia. `LedgerService.debit` comprueba el saldo contra importe más comisión y, si hay saldo, crea el movimiento `COMISION` con referencia `TRF-<id>-COM` en la misma transacción y en el mismo outbox.
+- No hay migración en ms-transfers: la comisión se recalcula y el cargo real queda registrado en ms-accounts.
+- Las reglas antifraude y el umbral de 5.000 € siguen mirando solo el importe de la transferencia.
+- En las pendientes, la comisión se cobra al aprobarlas.
+
+**Verificación:**
+
+- Tests: `./mvnw -pl ms-transfers -am test` → 44, 0 fallos (`TransferServiceTest` 28). `./mvnw -pl ms-accounts -am test` → 61 en ms-accounts, 0 fallos (`LedgerServiceIntegrationTest` 8, `LedgerDtosTest` 5). `./mvnw clean verify` → 160 tests, 0 fallos.
+- API con el entorno local:
+  - Externa de 100 € → `fee 1.00`; movimientos `-100.00` (`TRF-1`) y `-1.00` (`TRF-1-COM`), saldo final 2.399,00 €.
+  - Externa de 900 € → `fee 4.50`.
+  - Interna de 100 € → `fee 0.00`, sin movimiento de comisión.
+  - Externa de 99 € con saldo 99,75 € → `RECHAZADA` / `FONDOS_INSUFICIENTES`, `fee 0.00` y sin movimientos.
+  - Pendiente externa de 6.000 € → `fee 30.00`; al aprobarla se cobran 6.030 € y el saldo queda en 364,50 €.
+
+**Límites:**
+
+- **Deuda técnica asumida:** la comisión se recalcula con la tarifa vigente y no se guarda en la transferencia. Si la tarifa cambiara, una transferencia antigua mostraría una comisión distinta de la cobrada, y una pendiente se cobraría con la tarifa nueva en vez de con la que se mostró al crearla.
+- **Solución si llega el caso:** guardar `fee` en `transfers` (columna `DECIMAL(19,2)` y migración `V3`), fijarla al crear la transferencia y usar ese valor tanto al ejecutarla como al responder.
+- El aviso de la comisión usa el texto genérico de ms-notifications, que no tiene un caso `COMISION`; el concepto «Comisión por transferencia» deja claro qué es.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:

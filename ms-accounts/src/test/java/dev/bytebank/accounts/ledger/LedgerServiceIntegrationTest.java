@@ -46,21 +46,21 @@ class LedgerServiceIntegrationTest extends IntegrationTest {
 
     @Test
     void debitReducesBalance() {
-        ledger.debit(new MovementRequest("TRF-1", iban, new BigDecimal("30.00"), MovementType.TRANSFERENCIA_EMITIDA, null));
+        ledger.debit(new MovementRequest("TRF-1", iban, new BigDecimal("30.00"), MovementType.TRANSFERENCIA_EMITIDA, null, null));
 
         assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("70");
     }
 
     @Test
     void creditIncreasesBalance() {
-        ledger.credit(new MovementRequest("TRF-2", iban, new BigDecimal("50.00"), MovementType.TRANSFERENCIA_RECIBIDA, null));
+        ledger.credit(new MovementRequest("TRF-2", iban, new BigDecimal("50.00"), MovementType.TRANSFERENCIA_RECIBIDA, null, null));
 
         assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("150");
     }
 
     @Test
     void cannotDebitMoreThanBalance() {
-        assertThatThrownBy(() -> ledger.debit(new MovementRequest("TRF-3", iban, new BigDecimal("101.00"), MovementType.TRANSFERENCIA_EMITIDA, null)))
+        assertThatThrownBy(() -> ledger.debit(new MovementRequest("TRF-3", iban, new BigDecimal("101.00"), MovementType.TRANSFERENCIA_EMITIDA, null, null)))
                 .isInstanceOf(ApiException.class);
     }
 
@@ -70,8 +70,40 @@ class LedgerServiceIntegrationTest extends IntegrationTest {
         account.changeStatus(AccountStatus.BLOQUEADA);
         accounts.save(account);
 
-        assertThatThrownBy(() -> ledger.credit(new MovementRequest("TRF-4", iban, new BigDecimal("10.00"), MovementType.TRANSFERENCIA_RECIBIDA, null)))
+        assertThatThrownBy(() -> ledger.credit(new MovementRequest("TRF-4", iban, new BigDecimal("10.00"), MovementType.TRANSFERENCIA_RECIBIDA, null, null)))
                 .isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void debitWithCommissionCreatesTwoMovements() {
+        ledger.debit(new MovementRequest("TRF-FEE", iban, new BigDecimal("30.00"),
+                MovementType.TRANSFERENCIA_EMITIDA, null, new BigDecimal("1.00")));
+
+        assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("69");
+        assertThat(jdbc.queryForObject("select count(*) from movements where reference like 'TRF-FEE%'", Integer.class))
+                .isEqualTo(2);
+        assertThat(jdbc.queryForObject("select amount from movements where reference = 'TRF-FEE-COM'", BigDecimal.class))
+                .isEqualByComparingTo("-1");
+    }
+
+    @Test
+    void debitAcceptsCommissionThatLeavesZeroBalance() {
+        ledger.debit(new MovementRequest("TRF-FEE3", iban, new BigDecimal("99.00"),
+                MovementType.TRANSFERENCIA_EMITIDA, null, new BigDecimal("1.00")));
+
+        assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("0");
+        assertThat(jdbc.queryForObject("select count(*) from movements where reference like 'TRF-FEE3%'", Integer.class))
+                .isEqualTo(2);
+    }
+
+    @Test
+    void debitIsRejectedWhenBalanceDoesNotCoverAmountPlusCommission() {
+        assertThatThrownBy(() -> ledger.debit(new MovementRequest("TRF-FEE2", iban, new BigDecimal("99.50"),
+                MovementType.TRANSFERENCIA_EMITIDA, null, new BigDecimal("1.00"))))
+                .isInstanceOf(ApiException.class);
+
+        assertThat(accounts.findByIban(iban).orElseThrow().getBalance()).isEqualByComparingTo("100");
+        assertThat(jdbc.queryForObject("select count(*) from movements", Integer.class)).isZero();
     }
 
     @Test
@@ -88,7 +120,7 @@ class LedgerServiceIntegrationTest extends IntegrationTest {
                 try {
                     start.await();
                     ledger.debit(new MovementRequest("TRF-CONC", iban, new BigDecimal("30.00"),
-                            MovementType.TRANSFERENCIA_EMITIDA, null));
+                            MovementType.TRANSFERENCIA_EMITIDA, null, null));
                     successes.incrementAndGet();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

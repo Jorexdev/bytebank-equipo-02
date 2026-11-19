@@ -11,7 +11,7 @@ de datos PostgreSQL por servicio.
 | ms-gateway       | 8080   | Punto de entrada. Solo enruta las rutas `/api/**`               |
 | ms-auth          | 8081   | Registro, login y emisión de tokens JWT                         |
 | ms-accounts      | 8082   | Cuentas, saldo y movimientos (extracto)                         |
-| ms-transfers     | 8083   | Transferencias entre cuentas                                    |
+| ms-transfers     | 8083   | Transferencias entre cuentas y comisión a otros bancos          |
 | ms-cards         | 8084   | Tarjetas de débito y pagos                                      |
 | ms-fraud         | 8085   | Validación antifraude de transferencias                         |
 | ms-notifications | 8086   | Avisos al cliente de cada movimiento (consume eventos de Kafka) |
@@ -105,6 +105,9 @@ Notas para quien coja el proyecto:
 - **ms-fraud** está integrado en ms-transfers: cada transferencia se valida antes de ejecutarse y las tres reglas
   acordadas (importe máximo, transferencia externa y frecuencia) están implementadas. Si ms-fraud no responde, la
   operación se rechaza con 503. Ver [docs/fraude.md](docs/fraude.md).
+- **Transferencias:** las externas cobran una comisión del 0,5 % con mínimo de 1,00 €, registrada como movimiento
+  `COMISION` aparte en la cuenta de origen. Las internas no tienen comisión. El cargo de importe y comisión es
+  atómico: si el saldo no cubre ambos, la transferencia se rechaza sin mover dinero.
 - **ms-notifications** recibe los movimientos de Kafka, guarda un aviso por titular y los clientes los consultan en
   `GET /api/notifications`. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
 - Algunos clientes se han quejado del extracto de movimientos. No me ha dado tiempo a mirarlo.

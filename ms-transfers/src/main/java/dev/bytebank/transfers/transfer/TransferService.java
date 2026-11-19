@@ -102,7 +102,7 @@ public class TransferService {
 
         transfer = transfers.save(transfer);
         try {
-            accountsClient.debit(transfer.ledgerReference(), origin, amount, transfer.getConcept());
+            accountsClient.debit(transfer.ledgerReference(), origin, amount, transfer.fee(), transfer.getConcept());
         } catch (ApiException e) {
             transfer.reject(e.getCode());
             log.info("Transferencia {} rechazada: {}", transfer.getId(), e.getCode());

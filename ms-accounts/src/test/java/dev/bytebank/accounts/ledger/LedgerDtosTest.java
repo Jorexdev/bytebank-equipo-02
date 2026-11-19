@@ -27,8 +27,27 @@ class LedgerDtosTest {
         assertThat(VALIDATOR.validate(request("10.10"))).isEmpty();
     }
 
+    @Test
+    void rejectsNegativeFee() {
+        assertThat(VALIDATOR.validate(request("10.00", "-1.00"))).isNotEmpty();
+    }
+
+    @Test
+    void rejectsFeeWithMoreThanTwoDecimals() {
+        assertThat(VALIDATOR.validate(request("10.00", "1.001"))).isNotEmpty();
+    }
+
+    @Test
+    void missingFeeIsZero() {
+        assertThat(request("10.00").fee()).isEqualByComparingTo("0");
+    }
+
     private static MovementRequest request(String amount) {
+        return request(amount, null);
+    }
+
+    private static MovementRequest request(String amount, String fee) {
         return new MovementRequest("TRF-1", "ES6839990001000000000001", new BigDecimal(amount),
-                MovementType.TRANSFERENCIA_EMITIDA, null);
+                MovementType.TRANSFERENCIA_EMITIDA, null, fee == null ? null : new BigDecimal(fee));
     }
 }

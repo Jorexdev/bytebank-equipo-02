@@ -28,7 +28,8 @@ public class AccountsClient {
         }
     }
 
-    public record MovementRequest(String reference, String iban, BigDecimal amount, String type, String concept) {
+    public record MovementRequest(String reference, String iban, BigDecimal amount, String type, BigDecimal fee,
+                                  String concept) {
     }
 
     public record LedgerResult(String reference, BigDecimal balanceAfter) {
@@ -41,12 +42,14 @@ public class AccountsClient {
                 .body(AccountInfo.class));
     }
 
-    public LedgerResult debit(String reference, String iban, BigDecimal amount, String concept) {
-        return post("/internal/accounts/debit", new MovementRequest(reference, iban, amount, "TRANSFERENCIA_EMITIDA", concept));
+    public LedgerResult debit(String reference, String iban, BigDecimal amount, BigDecimal fee, String concept) {
+        return post("/internal/accounts/debit",
+                new MovementRequest(reference, iban, amount, "TRANSFERENCIA_EMITIDA", fee, concept));
     }
 
     public LedgerResult credit(String reference, String iban, BigDecimal amount, String concept) {
-        return post("/internal/accounts/credit", new MovementRequest(reference, iban, amount, "TRANSFERENCIA_RECIBIDA", concept));
+        return post("/internal/accounts/credit",
+                new MovementRequest(reference, iban, amount, "TRANSFERENCIA_RECIBIDA", null, concept));
     }
 
     private LedgerResult post(String path, MovementRequest request) {
