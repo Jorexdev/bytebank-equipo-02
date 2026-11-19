@@ -629,6 +629,86 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - **Solución si llega el caso:** guardar `fee` en `transfers` (columna `DECIMAL(19,2)` y migración `V3`), fijarla al crear la transferencia y usar ese valor tanto al ejecutarla como al responder.
 - El aviso de la comisión usa el texto genérico de ms-notifications, que no tiene un caso `COMISION`; el concepto «Comisión por transferencia» deja claro qué es.
 
+### 4.20. SEG-03 — Perfil demo y alta del primer gestor
+
+**Estado:** corregido y verificado en el entorno local.
+
+**Impacto:**
+
+- La única forma de crear un `GESTOR` era el seeder del perfil `demo`, con la contraseña publicada en el README. Si un entorno con datos reales arrancaba una sola vez con `demo` sobre una base vacía, quedaba un gestor con contraseña conocida que seguía existiendo aunque después se quitara el perfil. Ese gestor puede ver todas las cuentas y sus movimientos, bloquear cuentas y hacer ingresos.
+- El seeder de ms-accounts daba las cuentas de demo (3.450 € en total) a los ids 2 y 3 sin comprobar quiénes eran, y solo miraba su propia base. Con `demo` en ms-accounts y la tabla de cuentas vacía, los usuarios 2 y 3 de un entorno real habrían recibido dinero que nunca entró en el banco.
+
+**Corrección:**
+
+*Primer gestor (ms-auth):*
+
+- `GestorBootstrap` se ejecuta en cada arranque, con cualquier perfil, y lee `BOOTSTRAP_GESTOR_EMAIL` y `BOOTSTRAP_GESTOR_PASSWORD`, que no tienen valor por defecto. Sin ellas no hace nada.
+- Si solo llega una, o si la contraseña tiene menos de 12 caracteres o más de 72 bytes (lo que BCrypt tiene en cuenta), ms-auth no arranca. La configuración se valida antes de consultar la base de datos, así que un error de configuración falla en cualquier arranque.
+- Si ya existe un gestor, no crea otro y avisa de que hay que quitar las variables. Si el email ya es de otro usuario, ms-auth no arranca: no convierte a un cliente en gestor. El email se normaliza igual que en el registro.
+- La contraseña no aparece nunca en el log ni en los mensajes de error; solo se registra el email.
+- Se ejecuta después del seeder de demo (`@Order`): con `demo`, el gestor de la demo ya existe y aquí solo se avisa.
+- `docker-compose.yml` pasa las dos variables solo a ms-auth, no al resto de servicios.
+
+*Cuentas de la demo:*
+
+- ms-auth tiene `GET /internal/demo/holders`, que solo existe con el perfil `demo` (sin él responde 404). Devuelve los ids de Ana y Luis si `auth_db` solo tiene usuarios de la demo, `409 BASE_NO_DEMO` si hay algún otro usuario y `503 DEMO_NO_PREPARADA` si todavía falta Ana o Luis.
+- El seeder de ms-accounts ya no usa ids fijos: pide los titulares a ese endpoint.
+  - Con un 409 o un 404 no crea nada y lo registra como error, sin reintentar.
+  - Con un 503 o sin conexión, reintenta con esperas de 2, 4, 8 y 15 s, durante 3 minutos como máximo (`bytebank.demo.seed-timeout`). Si se agota el plazo, lo registra como error y explica que hay que reiniciar ms-accounts.
+- El seeder se ejecuta en un hilo aparte para no bloquear el arranque: en el equipo de pruebas, cada servicio tarda entre 75 y 97 s en arrancar cuando se levantan todos a la vez.
+- Las cuentas se crean en `DemoAccounts`, una clase aparte con `@Transactional`. Si el hilo llamara a un método de la propia clase, la llamada no pasaría por el proxy de Spring y no habría transacción.
+- El 503 corrige una carrera encontrada al diseñar el seeder. Spring Boot abre el puerto antes de ejecutar los `ApplicationRunner`, así que ms-auth puede responder antes de que su seeder haya creado a Ana y Luis. Si en ese caso respondiera 409, ms-accounts entendería que hay usuarios reales y la demo se quedaría sin cuentas.
+
+*Entornos con datos reales:*
+
+- Nuevo perfil `prod` para cualquier entorno con datos reales. `.env.example` explica qué perfil usar en cada entorno, y el README cómo crear el primer gestor.
+- `DemoProfileGuard` (`common`) es un bean que solo existe con `demo` y `prod` a la vez y que, al crearse, impide el arranque. Se carga desde `CommonAutoConfiguration`, así que protege los seis servicios de negocio. ms-gateway no depende de `common` ni tiene perfil `demo`.
+- `DemoUsersInProductionCheck` (ms-auth): con `prod`, si existe alguno de los tres usuarios de la demo, ms-auth no arranca. El mensaje solo da sus emails e ids y remite al procedimiento de limpieza de esta sección. No borra nada: borrar datos en producción lo decide una persona.
+- Las dos comprobaciones se hacen al crear los beans (constructor y `@PostConstruct`), antes de que Tomcat acepte peticiones. Con un `ApplicationRunner` habría unos instantes en que se podría iniciar sesión con la contraseña pública.
+
+**Procedimiento de limpieza** (si ms-auth no arranca con `prod` porque hay usuarios de la demo):
+
+La limpieza es manual y la decide una persona. El código solo detecta el problema y no borra nada.
+
+1. **Parar los servicios y hacer una copia** de todas las bases de datos antes de tocar nada.
+2. **Localizar los datos de la demo.** El mensaje de error da los ids de los usuarios. Con ellos se obtienen sus cuentas (en ms-accounts, por sus titulares) y los IBAN de esas cuentas, que es lo que usan el resto de servicios.
+3. **Comprobar que el dinero de la demo no ha llegado a clientes reales.** Hay que revisar si alguna cuenta de la demo es compartida con un cliente real, si hay transferencias completadas entre una cuenta de la demo y una real, y si se han aprobado pagos con tarjeta desde esas cuentas. **Si ocurre cualquiera de las tres cosas, no se borra nada y se escala:** se ha movido dinero que nunca entró en el banco, y deshacerlo es una decisión contable, no técnica.
+4. **Si no ha salido dinero, borrar los datos de la demo** en todos los servicios (tabla siguiente). Todo lo que haya quedado en el outbox de esas cuentas también se borra, incluidos los eventos pendientes: si no, al arrancar se publicarían y volverían a crear avisos para usuarios que ya no existen.
+5. **Arrancar con `prod`.** Si queda algún usuario de la demo, ms-auth no arranca y lo vuelve a indicar.
+
+| Servicio         | Datos de la demo que hay que revisar o borrar                                   |
+| ---------------- | ------------------------------------------------------------------------------- |
+| ms-auth          | Los usuarios de la demo                                                         |
+| ms-accounts      | Sus cuentas, titulares y movimientos, y los eventos del outbox de esas cuentas  |
+| ms-transfers     | Las transferencias en las que aparece una cuenta de la demo                     |
+| ms-cards         | Las tarjetas de esas cuentas y sus pagos                                        |
+| ms-fraud         | Las comprobaciones antifraude de esos usuarios o cuentas                        |
+| ms-notifications | Los avisos de esos usuarios o cuentas                                           |
+
+Las tablas y columnas de cada servicio están en sus migraciones de Flyway (`src/main/resources/db/migration`).
+
+**Verificación:**
+
+- `GestorBootstrapTest` (8 tests): sin variables no hace nada; crea el gestor con el email normalizado y la contraseña cifrada; no crea un segundo gestor; no arranca con solo el email, con solo la contraseña, con una contraseña corta, con una de más de 72 bytes ni con un email de otro usuario. La contraseña no aparece en el log ni en los mensajes.
+- `DemoHoldersControllerTest` (5 tests, con PostgreSQL real): devuelve los ids de Ana y Luis, que no son 2 y 3 porque el test vuelve a sembrar la demo en cada caso; 409 con un usuario real; 503 con la tabla vacía y con Luis borrado; 401 sin clave interna. `DemoHoldersWithoutDemoProfileTest`: 404 sin el perfil `demo`.
+- `DemoSeederTest` (7 tests, con un reloj falso que recorre los 3 minutos sin esperarlos): crea las cuentas con los ids que da ms-auth; no pregunta si ya hay cuentas; se para al primer intento con 409 o 404; reintenta con 503 y sin conexión; respeta el plazo y las esperas; y `run()` no espera a ms-auth.
+- `DemoProfileGuardTest` (4 tests): no arranca con `demo` y `prod`; arranca con uno solo; está en el `@Import` de `CommonAutoConfiguration`. `DemoUsersInProductionCheckTest` (2 tests): el mensaje solo incluye emails e ids, no nombres ni el hash de la contraseña.
+- ms-auth: 23 tests, ms-accounts: 68 tests, 0 fallos. `./mvnw clean verify`: 187 tests, 0 fallos.
+- Entorno (Docker Compose):
+  - Demo desde cero: las cuentas se crean al primer intento para los ids reales de Ana (2) y Luis (3). ms-auth había terminado de arrancar antes que ms-accounts.
+  - ms-auth parado mientras arranca ms-accounts: 7 reintentos con esperas de 2, 4, 8 y 15 s, ms-accounts responde `UP` mientras tanto, y las cuentas se crean en cuanto vuelve ms-auth.
+  - Un cliente real registrado en `auth_db` y la tabla de cuentas vacía: un solo intento, `409 BASE_NO_DEMO` y ninguna cuenta creada.
+  - `demo,prod`: ms-cards no arranca por `DemoProfileGuard`. ms-auth tampoco arranca, pero lo para antes la comprobación de usuarios de demo, porque Spring crea los beans del servicio antes que los de `common`.
+  - `prod` sobre la base de la demo: ms-auth no arranca, el mensaje da `gestor@bytebank.test (id 1), ana@bytebank.test (id 2), luis@bytebank.test (id 3)` y el puerto 8081 no llega a abrirse.
+  - `prod` sobre una base vacía con `BOOTSTRAP_GESTOR_*`: se crea la gestora, inicia sesión con rol `GESTOR` y no se siembra ninguna cuenta. En el arranque siguiente con las mismas variables avisa de que ya existe un gestor. La contraseña aparece 0 veces en los logs de todos los servicios.
+- Dos observaciones de las pruebas, ajenas a esta tarjeta: si se para y se vuelve a arrancar un servicio, ms-gateway puede seguir usando su IP antigua (ver la sección 7); y desde Git Bash en Windows, un `curl` con acentos en el JSON puede llegar mal codificado y devolver `400 DATOS_NO_VALIDOS`.
+
+**Límites:**
+
+- No existe ningún endpoint para cambiar la contraseña ni para dar de alta más gestores. El primer gestor conserva la contraseña de la variable de entorno, y mientras siga en el `.env` se puede ver en la configuración del contenedor (`docker inspect`). Por eso hay que quitarla después del primer arranque.
+- Los movimientos no guardan quién los hizo. Si el gestor de la demo hizo ingresos en cuentas reales, bloqueó cuentas o aprobó transferencias, el procedimiento de limpieza no lo detecta: hay que revisar las operaciones de gestor del periodo en que el entorno tuvo el perfil `demo`.
+- El procedimiento de limpieza no se ha ejecutado contra una base con datos reales mezclados. La lista de datos afectados se ha revisado contra las migraciones de cada servicio.
+
 ## 5. Funcionalidades incompletas identificadas
 
 El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
@@ -714,14 +794,15 @@ Los siguientes puntos requieren una revisión específica:
 
 - **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
 - **Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
-- **Alta de gestores:** el único sitio del código que crea un usuario con rol `GESTOR` es el seeder del perfil `demo`, que usa una contraseña pública. El registro crea siempre usuarios `CLIENTE` y no existe ningún endpoint para dar de alta gestores. Si un entorno con datos reales se inicializara con el perfil `demo`, quedaría un gestor con contraseña conocida y acceso a todas las cuentas. En SEG-02 se ha evitado que el perfil se active por defecto, pero falta un mecanismo de alta de gestores que no dependa de la demo.
+- **Alta de gestores:** resuelto (SEG-03, 4.20). El primer gestor de un entorno real se crea con `BOOTSTRAP_GESTOR_*`, sin contraseña por defecto. Los servicios no arrancan con `demo` y `prod` a la vez, y ms-auth no arranca con `prod` si hay usuarios de la demo. Queda pendiente un endpoint para cambiar la contraseña y otro para dar de alta más gestores.
 - **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
 - **Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos. Queda verificar los redondeos.
 - **Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
 - **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
 - **Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
 - **Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
-- **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes.
+- **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes. Con los siete servicios arrancando a la vez, cada uno tarda entre 75 y 97 s en el equipo de pruebas (SEG-03, 4.20).
+- **Gateway y reinicios de servicios:** en las pruebas de SEG-03 se paró ms-auth y, al volver, Docker le asignó otra IP. ms-gateway siguió enviando las peticiones a la IP antigua (`Connection refused: ms-auth/172.20.0.7:8081`) y respondía 500 hasta que se reinició el propio gateway. Probablemente es la caché de DNS o el pool de conexiones de Reactor Netty; no se ha investigado. Mientras tanto, después de recrear un servicio hay que reiniciar ms-gateway.
 - **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
 - **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
 
