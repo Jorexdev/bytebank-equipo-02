@@ -586,7 +586,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - `MovementEventPublicationTest` (PostgreSQL y Kafka reales): un movimiento deshecho no deja evento ni mensaje; una transferencia atómica simulada que falla en el abono no publica el cargo; un movimiento confirmado se guarda en el outbox y llega a Kafka; llamar al publicador sin transacción lanza `IllegalTransactionStateException`. Antes de la corrección, los dos primeros fallaban mostrando el aviso fantasma.
 - `OutboxRelayTest`: Kafka con error, sin respuesta o con un fallo inmediato en `send()` deja el evento pendiente y registra el intento; el evento siguiente no se adelanta; en la siguiente vuelta se publica.
 - `OutboxCleanerTest`: se borra el publicado hace 4 días; se conservan el publicado hace 2 días y el pendiente de hace 30.
-- ms-accounts: 55 tests, 0 fallos. `./mvnw clean verify`: 147 tests, 0 fallos (ejecutado antes de añadir el test de fallo inmediato).
+- ms-accounts: 55 tests, 0 fallos. `./mvnw clean verify`: 148 tests, 0 fallos.
 - Entorno (Docker Compose):
   - Con Kafka funcionando: una transferencia de 11 € genera dos eventos (cargo y abono), que se publican en menos de 2 s (el primer envío tras el arranque; después, en torno a 1 s). Ana recibe «Has enviado 11,00 €» y Luis «Has recibido 11,00 €».
   - Con Kafka parado: la transferencia responde `COMPLETADA` en menos de 1 s. Sus eventos quedan pendientes: el primero con los intentos fallidos y el error registrados, el segundo sin intentar para no adelantarlo. Al arrancar Kafka, los dos se publican solos y en orden, el error se limpia y cada aviso llega una sola vez.
