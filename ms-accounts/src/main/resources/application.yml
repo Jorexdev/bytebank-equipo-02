@@ -37,7 +37,9 @@ bytebank:
     send-timeout-ms: 12000  # mayor que delivery.timeout.ms (10000)
     retention-days: 3
     cleanup-cron: "0 0 4 * * *"
-
+  # SEG-03: con el perfil demo, cuánto tiempo espera ms-accounts a que ms-auth tenga lista la demo.
+  demo:
+    seed-timeout: 3m
 
 management:
   endpoints:

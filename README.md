@@ -68,6 +68,28 @@ El perfil `demo` no se activa por defecto: hay que pedirlo con `SPRING_PROFILES_
 Estas contraseñas son públicas, así que el perfil `demo` es solo para entornos locales. No lo actives nunca en un
 entorno con datos reales: el usuario gestor puede consultar y operar sobre todas las cuentas.
 
+Las cuentas de la demo se crean en segundo plano cuando ms-auth confirma que solo tiene los usuarios de la tabla.
+Si ms-accounts termina de arrancar antes que ms-auth, pueden tardar unos segundos en aparecer (como mucho, 3
+minutos). Si ms-auth tiene algún usuario que no es de la demo, no se crea ninguna cuenta y el log de ms-accounts lo
+explica.
+
+### Entorno con datos reales
+
+Arranca con `SPRING_PROFILES_ACTIVE=prod`. Ningún servicio arranca con `demo` y `prod` a la vez, y ms-auth no
+arranca si encuentra usuarios de la demo. Para limpiarlos, sigue el procedimiento de
+[docs/diagnostico.md](docs/diagnostico.md#420-seg-03--perfil-demo-y-alta-del-primer-gestor) (sección 4.20).
+
+El registro público solo crea clientes. El primer gestor se crea al arrancar ms-auth con estas variables en el `.env`:
+
+| Variable                    | Para qué sirve                                                 |
+| --------------------------- | -------------------------------------------------------------- |
+| `BOOTSTRAP_GESTOR_EMAIL`    | Email del primer gestor                                        |
+| `BOOTSTRAP_GESTOR_PASSWORD` | Su contraseña: entre 12 y 72 caracteres, sin valor por defecto |
+
+Solo se usan si todavía no existe ningún gestor. Si falta una de las dos o la contraseña no es válida, ms-auth no
+arranca. Cuando el gestor esté creado, quita las dos líneas del `.env`: la contraseña todavía no se puede cambiar
+desde la aplicación y, mientras siga en el `.env`, se ve en la configuración del contenedor.
+
 Ejemplo:
 
 ```bash

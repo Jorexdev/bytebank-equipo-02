@@ -20,6 +20,12 @@ bytebank:
     secret: ${JWT_SECRET}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}
   internal-key: ${INTERNAL_KEY}
+  # SEG-03: primer gestor de un entorno real. Sin valores por defecto: si no se indican, no se crea nada.
+  bootstrap-gestor:
+    email: ${BOOTSTRAP_GESTOR_EMAIL:}
+    password: ${BOOTSTRAP_GESTOR_PASSWORD:}
+    full-name: ${BOOTSTRAP_GESTOR_NAME:Gestor principal}
+
   security:
     public-paths:
       - /api/auth/register

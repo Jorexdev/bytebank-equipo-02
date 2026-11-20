@@ -19,6 +19,22 @@ public class AuthClient {
     public record UserInfo(Long id, String email, String fullName, Role role) {
     }
 
+        /** Titulares de las cuentas de demostración: los ids reales de Ana y Luis en ms-auth. */
+    public record DemoHolders(Long anaId, Long luisId) {
+    }
+
+    /**
+     * 200 si ms-auth solo tiene usuarios de demo; ApiException 409/404 si no se debe sembrar;
+     * RemoteUnavailableException si ms-auth no responde o su demo aún no está lista (503).
+     */
+    public DemoHolders demoHolders() {
+        return InternalClients.call(() -> client.get()
+                .uri("/internal/demo/holders")
+                .retrieve()
+                .body(DemoHolders.class));
+    }
+
+
     public UserInfo findByEmail(String email) {
         return InternalClients.call(() -> client.get()
                 .uri("/internal/users/by-email?email={email}", email)
