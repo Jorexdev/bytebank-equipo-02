@@ -55,13 +55,21 @@ Todos los servicios devuelven los errores así:
 ## Flujo de una transferencia
 
 1. El cliente hace `POST /api/transfers` con origen, destino, importe y concepto.
-2. ms-transfers comprueba los datos y registra la transferencia.
-3. Si el importe supera los 5.000 €, la transferencia queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
-4. Carga el importe en la cuenta de origen (`POST /internal/accounts/debit` en ms-accounts).
-5. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
-6. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
+2. ms-transfers comprueba los datos y que la cuenta de origen pertenezca al cliente.
+3. Envía la operación a ms-fraud (`POST /internal/fraud/check`).
+4. Si el veredicto es `BLOQUEADA`, la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado y no se mueve dinero.
+5. Si el veredicto es `REVISAR`, queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
+6. Si el veredicto es `APROBADA`, sigue el flujo normal. Si el importe supera los 5.000 €, también queda `PENDIENTE` por la regla de CAM-02.
+7. Calcula la comisión: 0,5 % del importe con un mínimo de 1,00 € si el destino es de otra entidad; cero si es de ByteBank.
+8. Carga el importe y la comisión en la cuenta de origen (`POST /internal/accounts/debit`). ms-accounts crea el movimiento de la transferencia y otro de tipo `COMISION` (`TRF-<id>-COM`) en la misma transacción.
+9. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
+10. La transferencia ejecutada queda `COMPLETADA` o `RECHAZADA` con el código del error.
 
-Las transferencias a otras entidades solo cargan en origen: la liquidación con el otro banco queda fuera de este sistema.
+Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve
+dinero. La aprobación de un gestor no repite la validación antifraude. La comisión no cuenta para las reglas
+antifraude ni para el umbral de 5.000 €.
+
+Las transferencias a otras entidades solo cargan en origen, incluida la comisión: la liquidación con el otro banco queda fuera de este sistema.
 
 ## Cuentas compartidas
 
@@ -72,6 +80,21 @@ cliente por su email con `POST /api/accounts/{iban}/holders`.
 - El alta bloquea la fila de la cuenta para que dos altas simultáneas no superen el máximo.
 - La relación vive en `account_holders`; `accounts` ya no guarda `owner_id`.
 - `GET /api/accounts/{iban}/holders` devuelve los datos de los titulares.
+
+## Pagos con tarjeta
+
+`ms-cards` serializa los pagos de una misma tarjeta bloqueando su fila antes de consultar el límite diario y debitar la
+cuenta. El límite cuenta únicamente pagos aprobados desde las 00:00 de `Europe/Madrid`; los pagos rechazados también
+se guardan en el historial, pero no consumen límite.
+
+- Cada intento recibe una referencia interna `CARD-<uuid>`, que también se guarda en `card_payments` para rastrear el
+  movimiento en `ms-accounts`.
+- Un pago aprobado se debita mediante `POST /internal/accounts/debit` con tipo `PAGO_TARJETA`.
+- `FONDOS_INSUFICIENTES` y `CUENTA_NO_OPERATIVA` son rechazos de negocio y se guardan. Si `ms-accounts` no responde,
+  se devuelve `503 SERVICIO_NO_DISPONIBLE` y no se guarda el intento.
+- Si el débito tiene éxito pero falla el guardado local, se intenta compensar con un crédito `INGRESO` usando la
+  referencia `<referencia>-REV`. El concepto identifica el pago original para que el movimiento sea trazable.
+- No hay idempotencia de pagos: un reintento del cliente representa otro intento.
 
 ## Roles
 

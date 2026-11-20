@@ -30,6 +30,8 @@ ms-accounts  --(topic bytebank.movements)-->  ms-notifications  <--  GET /api/no
 
 - `amount` lleva signo: positivo si entra dinero, negativo si sale (igual que en el extracto).
 - `type`: `INGRESO`, `TRANSFERENCIA_EMITIDA`, `TRANSFERENCIA_RECIBIDA`, `COMISION` o `PAGO_TARJETA`.
+- Entrega **al menos una vez**. ms-accounts guarda el evento en una tabla outbox en la misma transacción que el movimiento y lo publica cuando esa transacción se ha confirmado. Por eso solo se publican movimientos que existen, pero un mismo evento puede llegar más de una vez: el consumidor debe ignorar los repetidos (por `movementId` y titular).
+- Los eventos se publican en segundo plano: normalmente llegan en menos de un segundo. Si Kafka no está disponible, se publican en cuanto vuelve, en el orden en que se produjeron.
 
 ## Reglas
 

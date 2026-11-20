@@ -16,6 +16,13 @@ spring:
       hibernate.jdbc.time_zone: UTC
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
 
 bytebank:
   zone: Europe/Madrid
@@ -24,6 +31,15 @@ bytebank:
   internal-key: ${INTERNAL_KEY}
   services:
     auth-url: ${AUTH_URL:http://localhost:8081}
+  outbox:
+    relay-delay-ms: 1000
+    batch-size: 100
+    send-timeout-ms: 12000  # mayor que delivery.timeout.ms (10000)
+    retention-days: 3
+    cleanup-cron: "0 0 4 * * *"
+  # SEG-03: con el perfil demo, cuánto tiempo espera ms-accounts a que ms-auth tenga lista la demo.
+  demo:
+    seed-timeout: 3m
 
 management:
   endpoints:

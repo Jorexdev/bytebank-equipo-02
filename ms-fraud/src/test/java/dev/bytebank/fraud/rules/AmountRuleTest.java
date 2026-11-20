@@ -5,17 +5,27 @@ import dev.bytebank.fraud.check.Verdict;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AmountRuleTest {
 
-    private final AmountRule rule = new AmountRule(new FraudProperties(new BigDecimal("20000"), new BigDecimal("1000")));
+    private final AmountRule rule = new AmountRule(
+            new FraudProperties(new BigDecimal("20000"), new BigDecimal("1000"), 5, Duration.ofMinutes(10)));
 
     @Test
     void blocksHugeAmounts() {
         var hit = rule.evaluate(context("25000"));
+
+        assertThat(hit).isPresent();
+        assertThat(hit.get().verdict()).isEqualTo(Verdict.BLOQUEADA);
+    }
+
+    @Test
+    void blocksTheExactThreshold() {
+        var hit = rule.evaluate(context("20000"));
 
         assertThat(hit).isPresent();
         assertThat(hit.get().verdict()).isEqualTo(Verdict.BLOQUEADA);

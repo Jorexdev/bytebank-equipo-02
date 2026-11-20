@@ -5,6 +5,7 @@ import dev.bytebank.common.iban.Iban;
 import dev.bytebank.common.security.AuthUser;
 import dev.bytebank.common.web.PageResponse;
 import dev.bytebank.transfers.client.AccountsClient;
+import dev.bytebank.transfers.client.FraudClient;
 import dev.bytebank.transfers.transfer.TransferDtos.CreateTransferRequest;
 import dev.bytebank.transfers.transfer.TransferDtos.TransferResponse;
 import org.slf4j.Logger;
@@ -24,10 +25,12 @@ public class TransferService {
 
     private final TransferRepository transfers;
     private final AccountsClient accountsClient;
+    private final FraudClient fraudClient;
 
-    public TransferService(TransferRepository transfers, AccountsClient accountsClient) {
+    public TransferService(TransferRepository transfers, AccountsClient accountsClient, FraudClient fraudClient) {
         this.transfers = transfers;
         this.accountsClient = accountsClient;
+        this.fraudClient = fraudClient;
     }
 
     public Transfer create(CreateTransferRequest request, AuthUser user) {
@@ -50,11 +53,16 @@ public class TransferService {
             throw ApiException.forbidden("No puedes hacer transferencias desde cuentas que no te pertenecen");
         }
 
-        // TODO validar con ms-fraud antes de ejecutar (ver docs/fraude.md)
+        FraudClient.CheckResponse fraud = fraudClient.check(origin, destination, user.id(), amount);
 
         Transfer transfer = new Transfer(origin, destination, amount, request.concept(), user.id());
 
-        if (amount.compareTo(PENDING_THRESHOLD) > 0) {
+        if (fraud.verdict() == FraudClient.Verdict.BLOQUEADA) {
+            String reason = fraud.reasons().isEmpty() ? "FRAUDE" : String.join(",", fraud.reasons());
+            transfer.reject(reason);
+            return transfers.save(transfer);
+        }
+        if (fraud.verdict() == FraudClient.Verdict.REVISAR || amount.compareTo(PENDING_THRESHOLD) > 0) {
             transfer.pending();
             return transfers.save(transfer);
         }
@@ -94,7 +102,7 @@ public class TransferService {
 
         transfer = transfers.save(transfer);
         try {
-            accountsClient.debit(transfer.ledgerReference(), origin, amount, transfer.getConcept());
+            accountsClient.debit(transfer.ledgerReference(), origin, amount, transfer.fee(), transfer.getConcept());
         } catch (ApiException e) {
             transfer.reject(e.getCode());
             log.info("Transferencia {} rechazada: {}", transfer.getId(), e.getCode());

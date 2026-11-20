@@ -11,7 +11,7 @@ de datos PostgreSQL por servicio.
 | ms-gateway       | 8080   | Punto de entrada. Solo enruta las rutas `/api/**`               |
 | ms-auth          | 8081   | Registro, login y emisión de tokens JWT                         |
 | ms-accounts      | 8082   | Cuentas, saldo y movimientos (extracto)                         |
-| ms-transfers     | 8083   | Transferencias entre cuentas                                    |
+| ms-transfers     | 8083   | Transferencias entre cuentas y comisión a otros bancos          |
 | ms-cards         | 8084   | Tarjetas de débito y pagos                                      |
 | ms-fraud         | 8085   | Validación antifraude de transferencias                         |
 | ms-notifications | 8086   | Avisos al cliente de cada movimiento (consume eventos de Kafka) |
@@ -68,6 +68,28 @@ El perfil `demo` no se activa por defecto: hay que pedirlo con `SPRING_PROFILES_
 Estas contraseñas son públicas, así que el perfil `demo` es solo para entornos locales. No lo actives nunca en un
 entorno con datos reales: el usuario gestor puede consultar y operar sobre todas las cuentas.
 
+Las cuentas de la demo se crean en segundo plano cuando ms-auth confirma que solo tiene los usuarios de la tabla.
+Si ms-accounts termina de arrancar antes que ms-auth, pueden tardar unos segundos en aparecer (como mucho, 3
+minutos). Si ms-auth tiene algún usuario que no es de la demo, no se crea ninguna cuenta y el log de ms-accounts lo
+explica.
+
+### Entorno con datos reales
+
+Arranca con `SPRING_PROFILES_ACTIVE=prod`. Ningún servicio arranca con `demo` y `prod` a la vez, y ms-auth no
+arranca si encuentra usuarios de la demo. Para limpiarlos, sigue el procedimiento de
+[docs/diagnostico.md](docs/diagnostico.md#420-seg-03--perfil-demo-y-alta-del-primer-gestor) (sección 4.20).
+
+El registro público solo crea clientes. El primer gestor se crea al arrancar ms-auth con estas variables en el `.env`:
+
+| Variable                    | Para qué sirve                                                 |
+| --------------------------- | -------------------------------------------------------------- |
+| `BOOTSTRAP_GESTOR_EMAIL`    | Email del primer gestor                                        |
+| `BOOTSTRAP_GESTOR_PASSWORD` | Su contraseña: entre 12 y 72 caracteres, sin valor por defecto |
+
+Solo se usan si todavía no existe ningún gestor. Si falta una de las dos o la contraseña no es válida, ms-auth no
+arranca. Cuando el gestor esté creado, quita las dos líneas del `.env`: la contraseña todavía no se puede cambiar
+desde la aplicación y, mientras siga en el `.env`, se ve en la configuración del contenedor.
+
 Ejemplo:
 
 ```bash
@@ -100,12 +122,16 @@ Si alguna de las comprobaciones falla, la ejecución global de la CI se marca co
 
 Notas para quien coja el proyecto:
 
-- **ms-cards**: se pueden listar, bloquear y emitir tarjetas; pagar sigue devolviendo 501.
-  El contrato acordado está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
-- **ms-fraud** funciona por su cuenta, pero ms-transfers todavía no lo llama. Falta también la regla de frecuencia.
-  Ver [docs/fraude.md](docs/fraude.md).
-- **ms-notifications** ya recibe los movimientos de Kafka y guarda los avisos, pero falta el endpoint para
-  consultarlos. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
+- **ms-cards**: se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
+  rechazados de negocio quedan en el historial. El contrato está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
+- **ms-fraud** está integrado en ms-transfers: cada transferencia se valida antes de ejecutarse y las tres reglas
+  acordadas (importe máximo, transferencia externa y frecuencia) están implementadas. Si ms-fraud no responde, la
+  operación se rechaza con 503. Ver [docs/fraude.md](docs/fraude.md).
+- **Transferencias:** las externas cobran una comisión del 0,5 % con mínimo de 1,00 €, registrada como movimiento
+  `COMISION` aparte en la cuenta de origen. Las internas no tienen comisión. El cargo de importe y comisión es
+  atómico: si el saldo no cubre ambos, la transferencia se rechaza sin mover dinero.
+- **ms-notifications** recibe los movimientos de Kafka, guarda un aviso por titular y los clientes los consultan en
+  `GET /api/notifications`. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
 - Algunos clientes se han quejado del extracto de movimientos. No me ha dado tiempo a mirarlo.
 
 Raúl

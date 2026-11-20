@@ -20,11 +20,15 @@ public final class TransferDtos {
     }
 
     public record TransferResponse(Long id, String originIban, String destinationIban, BigDecimal amount,
-                                   String concept, TransferStatus status, String rejectionReason, Instant createdAt) {
+                                   BigDecimal fee, String concept, TransferStatus status, String rejectionReason,
+                                   Instant createdAt) {
 
         public static TransferResponse from(Transfer t) {
+            BigDecimal fee = t.getStatus() == TransferStatus.RECHAZADA
+                    ? BigDecimal.ZERO.setScale(2)
+                    : t.fee();
             return new TransferResponse(t.getId(), t.getOriginIban(), t.getDestinationIban(), t.getAmount(),
-                    t.getConcept(), t.getStatus(), t.getRejectionReason(), t.getCreatedAt());
+                    fee, t.getConcept(), t.getStatus(), t.getRejectionReason(), t.getCreatedAt());
         }
     }
 }
