@@ -1,5 +1,7 @@
 # Contrato de ms-cards
 
+**Estado:** implementado y verificado (TAR-01, sección 4.16 del [diagnostico.md](../diagnostico.md)).
+
 Tarjetas de débito asociadas a una cuenta. Todas las rutas son para usuarios con rol `CLIENTE` y pasan por el gateway.
 
 ## Emitir tarjeta
@@ -71,3 +73,9 @@ Respuesta `201`, tanto si se aprueba como si se rechaza:
 - `GET /api/cards/{id}`: una tarjeta.
 - `PATCH /api/cards/{id}/status` con `{ "status": "BLOQUEADA" | "ACTIVA" }`.
 - `GET /api/cards/{id}/payments`: historial de pagos de la tarjeta.
+
+## Fuentes
+
+- Rutas y DTOs: `ms-cards/src/main/java/dev/bytebank/cards/card/CardController.java`, `CardDtos.java`.
+- Lógica de emisión, límite y pago: `ms-cards/src/main/java/dev/bytebank/cards/card/CardService.java`.
+- Migraciones: `ms-cards/src/main/resources/db/migration/`.

@@ -1,5 +1,7 @@
 # Validación antifraude (ms-fraud)
 
+**Estado:** implementado y verificado (reglas e integración, 4.13 y 4.14 del [diagnostico.md](diagnostico.md)). La decisión de fallo cerrado está recogida en [decisiones.md](decisiones.md).
+
 ms-fraud recibe cada transferencia antes de ejecutarse y devuelve un veredicto:
 
 | Veredicto | Qué significa | Qué hace ms-transfers |
@@ -70,3 +72,10 @@ Motivos:
 - La frecuencia se cuenta sobre `fraud_checks`, así que un intento fallido también acerca el bloqueo.
 - No hay bloqueo por cuenta: dos peticiones simultáneas pueden leer el mismo historial y dejar pasar como mucho una
   operación extra. Si se necesita un conteo estricto, habría que añadir un bloqueo por cuenta.
+
+## Fuentes
+
+- Reglas: `ms-fraud/src/main/java/dev/bytebank/fraud/rules/`.
+- Contrato interno: `ms-fraud/src/main/java/dev/bytebank/fraud/check/FraudController.java`.
+- Servicio y umbrales: `ms-fraud/src/main/java/dev/bytebank/fraud/check/FraudService.java`, `ms-fraud/src/main/java/dev/bytebank/fraud/FraudProperties.java`.
+- Llamada desde transferencias: `ms-transfers/src/main/java/dev/bytebank/transfers/transfer/TransferService.java`.
