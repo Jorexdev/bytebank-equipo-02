@@ -141,3 +141,6 @@ Notas para quien coja el proyecto:
 
 El detalle de cada incidencia, con su verificación, está en [docs/diagnostico.md](docs/diagnostico.md). Las decisiones
 tomadas y sus motivos están en [docs/decisiones.md](docs/decisiones.md).
+
+Las notas de traspaso del equipo anterior (junio de 2026) están resueltas; su detalle está en
+[docs/diagnostico.md](docs/diagnostico.md), sección 5.
