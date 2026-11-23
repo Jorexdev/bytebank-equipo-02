@@ -1,5 +1,7 @@
 # Contrato de ms-notifications
 
+**Estado:** implementado y verificado (KAF-01, KAF-02 y KAF-03; secciones 4.15 a 4.18 del [diagnostico.md](../diagnostico.md)).
+
 Avisos al cliente de cada movimiento de sus cuentas: ingresos, transferencias enviadas y recibidas, comisiones y pagos
 con tarjeta. ms-accounts publica un evento en Kafka por cada movimiento y ms-notifications lo convierte en un aviso.
 
@@ -81,3 +83,9 @@ Va en el `docker-compose.yml` (imagen `apache/kafka`, modo KRaft, sin ZooKeeper)
 docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic bytebank.movements --from-beginning --property print.key=true
 ```
+
+## Fuentes
+
+- Evento y publicación: `ms-accounts/src/main/java/dev/bytebank/accounts/event/`.
+- Consumo y textos de los avisos: `ms-notifications/src/main/java/dev/bytebank/notifications/event/`, `NotificationMessages.java`.
+- Endpoint y respuesta: `ms-notifications/src/main/java/dev/bytebank/notifications/notification/NotificationController.java`, `NotificationResponse.java`.

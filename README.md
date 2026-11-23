@@ -20,12 +20,12 @@ Más detalle en [docs/arquitectura.md](docs/arquitectura.md).
 
 ## Seguridad
 
-La API utiliza autenticación mediante JWT y distingue dos roles:
+La API utiliza autenticación mediante JWT y distingue dos roles de usuario:
 
 - **CLIENTE:** puede consultar las cuentas de las que es titular y sus movimientos, realizar transferencias desde ellas y pedir tarjetas.
-- **GESTOR:** puede consultar todas las cuentas y sus movimientos, y cambiar el estado de las cuentas.
+- **GESTOR:** puede consultar todas las cuentas y sus movimientos, cambiar el estado de las cuentas, hacer ingresos, aprobar o rechazar transferencias pendientes y consultar las validaciones antifraude.
 
-Las operaciones internas entre microservicios utilizan rutas `/internal/**`, protegidas mediante la cabecera `X-Internal-Key` y el rol `INTERNAL`.
+Además existe un tercer rol, **`INTERNAL`**, que no es de usuario: se da solo a las peticiones entre microservicios. Las rutas `/internal/**` no pasan por el gateway y exigen la cabecera `X-Internal-Key` junto con ese rol.
 
 Los secretos (`JWT_SECRET`, `INTERNAL_KEY` y la contraseña de la base de datos) llegan siempre por variables de entorno y
 nunca se escriben en el código ni en ficheros versionados. No tienen valor por defecto: si falta alguno, el sistema no arranca.
@@ -53,8 +53,9 @@ El `.env` no se sube al repositorio y cada persona tiene el suyo. Variables obli
 Genera un `JWT_SECRET` aleatorio y distinto en cada entorno, por ejemplo con `openssl rand -base64 48`.
 Si falta o tiene menos de 32 caracteres, los servicios no arrancan.
 
-La API queda en `http://localhost:8080`. Cada servicio publica su Swagger en
+La API queda en `http://localhost:8080`. Cada servicio de negocio publica su Swagger en
 `http://localhost:<puerto>/swagger-ui.html` (por ejemplo, `http://localhost:8082/swagger-ui.html` para ms-accounts).
+El gateway no publica Swagger: solo enruta las peticiones.
 
 El perfil `demo` no se activa por defecto: hay que pedirlo con `SPRING_PROFILES_ACTIVE=demo` en el `.env`
 (`.env.example` ya lo trae así). Sobre una base de datos vacía crea estos usuarios y unas cuentas con saldo:
@@ -118,20 +119,28 @@ El workflow se ejecuta en cada `push` y en cada Pull Request, mediante dos traba
 
 Si alguna de las comprobaciones falla, la ejecución global de la CI se marca como fallida.
 
-## Estado del proyecto (junio de 2026)
+## Estado del proyecto (noviembre de 2026)
 
 Notas para quien coja el proyecto:
 
-- **ms-cards**: se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
+- **Cuentas compartidas:** hasta cuatro titulares por cuenta. Cualquier titular puede verla, transferir desde ella y
+  pedir tarjetas. Ver [docs/arquitectura.md](docs/arquitectura.md#cuentas-compartidas).
+- **ms-cards:** se pueden listar, bloquear, emitir y pagar con tarjetas. Los pagos aprobados debitan la cuenta y los
   rechazados de negocio quedan en el historial. El contrato está en [docs/contratos/ms-cards.md](docs/contratos/ms-cards.md).
 - **ms-fraud** está integrado en ms-transfers: cada transferencia se valida antes de ejecutarse y las tres reglas
   acordadas (importe máximo, transferencia externa y frecuencia) están implementadas. Si ms-fraud no responde, la
   operación se rechaza con 503. Ver [docs/fraude.md](docs/fraude.md).
 - **Transferencias:** las externas cobran una comisión del 0,5 % con mínimo de 1,00 €, registrada como movimiento
   `COMISION` aparte en la cuenta de origen. Las internas no tienen comisión. El cargo de importe y comisión es
-  atómico: si el saldo no cubre ambos, la transferencia se rechaza sin mover dinero.
+  atómico: si el saldo no cubre ambos, la transferencia se rechaza sin mover dinero. Las de más de 5.000 € quedan
+  pendientes de aprobación de un gestor.
 - **ms-notifications** recibe los movimientos de Kafka, guarda un aviso por titular y los clientes los consultan en
   `GET /api/notifications`. Contrato en [docs/contratos/ms-notifications.md](docs/contratos/ms-notifications.md).
-- Algunos clientes se han quejado del extracto de movimientos. No me ha dado tiempo a mirarlo.
+- **Extracto:** corregido el filtro por fechas (el día final no salía y un pago a las 00:30 aparecía el día anterior)
+  y la paginación que saltaba un movimiento. Los saldos usan `BigDecimal`, así que los céntimos cuadran.
 
-Raúl
+El detalle de cada incidencia, con su verificación, está en [docs/diagnostico.md](docs/diagnostico.md). Las decisiones
+tomadas y sus motivos están en [docs/decisiones.md](docs/decisiones.md).
+
+Las notas de traspaso del equipo anterior (junio de 2026) están resueltas; su detalle está en
+[docs/diagnostico.md](docs/diagnostico.md), sección 5.
