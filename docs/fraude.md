@@ -7,7 +7,7 @@ ms-fraud recibe cada transferencia antes de ejecutarse y devuelve un veredicto:
 | Veredicto | Qué significa | Qué hace ms-transfers |
 |---|---|---|
 | `APROBADA` | Se puede ejecutar | Sigue el flujo normal; si supera 5.000 €, queda pendiente por la regla de CAM-02 |
-| `REVISAR` | Un gestor tiene que revisarla antes de ejecutarla | Queda `PENDIENTE`, sin mover dinero, hasta que un gestor la aprueba o la rechaza |
+| `REVISAR` | Un gestor tiene que revisarla antes de ejecutarla | Queda `PENDIENTE_REVISION`, sin mover dinero, hasta que un gestor la aprueba o la rechaza |
 | `BLOQUEADA` | Se rechaza | Queda `RECHAZADA` con el código de la regla o reglas que hayan saltado; no se mueve dinero |
 
 Si saltan varias reglas, gana el veredicto más grave. Cada validación queda guardada (tabla `fraud_checks`).
@@ -52,7 +52,7 @@ Respuesta:
 ms-transfers llama a `POST /internal/fraud/check` después de comprobar los datos y la titularidad de la cuenta de
 origen, y antes de guardar o ejecutar la transferencia.
 
-La aprobación de un gestor no repite la validación: cuando aprueba una transferencia `PENDIENTE`, ejecuta el
+La aprobación de un gestor no repite la validación: cuando aprueba una transferencia `PENDIENTE_REVISION`, ejecuta el
 movimiento con el veredicto que ya se registró al crearla.
 
 ## Si ms-fraud no responde

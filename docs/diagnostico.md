@@ -329,11 +329,11 @@ El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque
 
 **Estado:** implementado y verificado en el entorno local.
 
-**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
+**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE_REVISION`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
 
 **Cambios aplicados:**
 
-- Nuevo estado `PENDIENTE` para la transferencia.
+- Nuevo estado para la transferencia. Al implementarse se llamó `PENDIENTE`; hoy es `PENDIENTE_REVISION` (ver «Cambio de nombre» más abajo).
 - Al crear una transferencia de más de 5.000 € se guarda como pendiente y no se llama a ms-accounts.
 - Nuevos endpoints `POST /api/transfers/{id}/approve` y `POST /api/transfers/{id}/reject`, solo para el rol `GESTOR`.
 - Aprobar ejecuta el mismo flujo que una transferencia normal, incluida la comprobación de destino y el reverso de BUG-06. Rechazar deja el motivo `RECHAZADA_POR_GESTOR`.
@@ -344,11 +344,20 @@ El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque
 **Verificación:**
 
 - Tests automáticos: 17 en `TransferServiceTest`.
-- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
+- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` (hoy `PENDIENTE_REVISION`) con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
 
 **Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
 
-**Pendiente:** el estado `PENDIENTE` se llamará `PENDIENTE_REVISION` para que se distinga del resto. Es un cambio de código, todavía no aplicado; ver sección 8.
+**Cambio de nombre a `PENDIENTE_REVISION`:** resuelto. El estado se llamaba `PENDIENTE`, pero el nombre acordado en la tarjeta es `PENDIENTE_REVISION`. Es el mismo estado que reciben las transferencias con veredicto `REVISAR` (4.13).
+
+- `TransferStatus`, `Transfer.pending()`, `TransferService` y la consulta JPQL de `TransferRepository.updateStatusIfPending` usan el nuevo estado.
+- Migración `V3__rename_pending_status.sql`: las filas guardadas como `PENDIENTE` pasan a `PENDIENTE_REVISION`. La columna `status` es `VARCHAR(30)` sin restricción `CHECK`, así que basta con un `UPDATE`.
+- El código de error `TRANSFERENCIA_NO_PENDIENTE` no cambia: es parte del contrato de la API.
+- Primero se subió el test en rojo (ejecución #106 de la CI sobre `40840ab`) y después el arreglo (ejecución #107, en verde, sobre `eab3358`).
+- Tests: tres asserts de `TransferServiceTest` (más de 5.000 €, veredicto `REVISAR` y listado de pendientes). `TransferPendingPersistenceIntegrationTest`, con PostgreSQL real, comprueba el valor guardado en la columna, el listado de pendientes y que la consulta JPQL solo deja decidir una vez. `PendingStatusMigrationTest` deja la base en V2, inserta una fila `PENDIENTE` y comprueba que la V3 la cambia a `PENDIENTE_REVISION` sin tocar las `COMPLETADA` ni las `RECHAZADA`. `./mvnw clean verify`: 191 tests, 0 fallos.
+- Prueba de punta a punta (23/11/2026), con el stack completo levantado aparte, una base de datos vacía e imágenes construidas desde la rama: Flyway aplica la V3; una transferencia de 6.000 € y otra de 1.500 € a otra entidad (veredicto `REVISAR`) quedan `PENDIENTE_REVISION` sin mover dinero; el gestor ve las dos en `GET /api/transfers/pending` y Ana recibe 403; aprobar la primera la deja `COMPLETADA` y mueve los 6.000 €, y aprobarla otra vez da `409 TRANSFERENCIA_NO_PENDIENTE`; rechazar la segunda la deja `RECHAZADA` con `RECHAZADA_POR_GESTOR` sin mover dinero. 16 comprobaciones correctas y ningún error en los logs. Como la base estaba vacía, la migración de filas existentes la cubre `PendingStatusMigrationTest`.
+
+**Despliegue y vuelta atrás:** la V3 y el código nuevo se despliegan juntos. El código anterior no sabe leer `PENDIENTE_REVISION` y fallaría al cargar esas transferencias. Para volver a la versión anterior, antes de arrancarla hay que deshacer el cambio con `UPDATE transfers SET status = 'PENDIENTE' WHERE status = 'PENDIENTE_REVISION';`.
 
 ### 4.12. SEG-02 — Secretos en el repositorio
 
@@ -444,7 +453,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Nuevo `FraudClient` en ms-transfers; llama a `POST /internal/fraud/check` con la clave interna.
 - Cada transferencia se valida después de comprobar la titularidad y antes de guardarse o ejecutarse.
 - `BLOQUEADA`: la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado. No se mueve dinero.
-- `REVISAR`: queda `PENDIENTE`, igual que las de más de 5.000 €. Un gestor la aprueba o la rechaza.
+- `REVISAR`: queda `PENDIENTE_REVISION`, igual que las de más de 5.000 €. Un gestor la aprueba o la rechaza.
 - `APROBADA`: sigue el flujo normal; si supera 5.000 €, CAM-02 la deja pendiente.
 - Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve dinero. La decisión es de **fallo cerrado**: no se ejecuta una operación sin control antifraude y no se guarda un rechazo falso; el cliente puede reintentar.
 - La aprobación del gestor no repite la validación: se hizo al crear la transferencia.
@@ -454,7 +463,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 **Verificación:**
 
 - Tests automáticos: `./mvnw -pl ms-transfers,ms-fraud -am test` → 41 tests, 0 fallos. `TransferServiceTest` pasa de 18 a 22 tests; `AmountRuleTest` tiene 3.
-- API: 21.000 € → `RECHAZADA` / `IMPORTE_MAXIMO`; 20.000 € exactos → `RECHAZADA` / `IMPORTE_MAXIMO`; 1.500 € a otra entidad → `PENDIENTE` con veredicto `REVISAR` / `EXTERNA_IMPORTE_ALTO`; el gestor la aprueba y el dinero se mueve; 100 € interna → `COMPLETADA`; 6.000 € interna → `PENDIENTE` por CAM-02 y el gestor la rechaza.
+- API: 21.000 € → `RECHAZADA` / `IMPORTE_MAXIMO`; 20.000 € exactos → `RECHAZADA` / `IMPORTE_MAXIMO`; 1.500 € a otra entidad → `PENDIENTE` (hoy `PENDIENTE_REVISION`) con veredicto `REVISAR` / `EXTERNA_IMPORTE_ALTO`; el gestor la aprueba y el dinero se mueve; 100 € interna → `COMPLETADA`; 6.000 € interna → `PENDIENTE` (hoy `PENDIENTE_REVISION`) por CAM-02 y el gestor la rechaza.
 - Con ms-fraud parado, una transferencia devuelve `503 SERVICIO_NO_DISPONIBLE`, no crea la transferencia y no cambia el saldo.
 - `GET /api/fraud/checks` con un cliente devuelve 403; con un gestor, 200.
 
@@ -755,13 +764,13 @@ Las cuentas compartidas (CAM-01) están descritas en 4.22.
 
 ## 6. Pruebas y cobertura
 
-Hay clases de prueba en `common` y en los seis servicios de negocio; `ms-gateway` no tiene ninguna. Los tests de integración de `ms-auth`, `ms-accounts`, `ms-cards` y `ms-notifications` usan PostgreSQL real con Testcontainers, y los del outbox de `ms-accounts` también Kafka.
+Hay clases de prueba en `common` y en los seis servicios de negocio; `ms-gateway` no tiene ninguna. Los tests de integración de `ms-auth`, `ms-accounts`, `ms-transfers`, `ms-cards` y `ms-notifications` usan PostgreSQL real con Testcontainers, y los del outbox de `ms-accounts` también Kafka.
 
 La existencia de pruebas no garantiza que cubran todos los escenarios de negocio. Es necesario revisar su contenido, ejecución y resultados antes de valorar la cobertura real.
 
 ### 6.1. Resultados de las pruebas automatizadas
 
-**Fecha de ejecución:** 22/11/2026, con `./mvnw clean verify` sobre el commit `6be6b67` de `develop` (JDK 21, compilación para Java 17). Resultado: `BUILD SUCCESS`. Las cifras salen de los informes de surefire de cada módulo.
+**Fecha de ejecución:** 23/11/2026, con `./mvnw clean verify` sobre el código del commit `eab3358` (CAM-02, cambio a `PENDIENTE_REVISION`), con JDK 21 y compilación para Java 17. Resultado: `BUILD SUCCESS`. Las cifras salen de los informes de surefire de cada módulo.
 
 | Módulo             | Clases | Tests | Fallos | Errores | Omitidos |
 | ------------------ | -----: | ----: | -----: | ------: | -------: |
@@ -769,11 +778,11 @@ La existencia de pruebas no garantiza que cubran todos los escenarios de negocio
 | `ms-gateway`       |      0 |     0 |      0 |       0 |        0 |
 | `ms-auth`          |      6 |    23 |      0 |       0 |        0 |
 | `ms-accounts`      |     14 |    68 |      0 |       0 |        0 |
-| `ms-transfers`     |      1 |    28 |      0 |       0 |        0 |
+| `ms-transfers`     |      3 |    32 |      0 |       0 |        0 |
 | `ms-cards`         |      7 |    25 |      0 |       0 |        0 |
 | `ms-fraud`         |      2 |     6 |      0 |       0 |        0 |
 | `ms-notifications` |      4 |    17 |      0 |       0 |        0 |
-| **Total**          |     38 |   187 |      0 |       0 |        0 |
+| **Total**          |     41 |   191 |      0 |       0 |        0 |
 
 **Ejecución inicial (10/11/2026):** 12 tests superados y 4 errores en `LedgerServiceIntegrationTest` de `ms-accounts`, porque la migración V3 impedía arrancar el contexto (4.1).
 
@@ -789,9 +798,9 @@ El origen estaba en la implementación: el fin del rango era exclusivo y se calc
 
 ### 6.3. Resumen de resultados
 
-- 187 tests superados en 38 clases, sin fallos, errores ni tests omitidos.
+- 191 tests superados en 41 clases, sin fallos, errores ni tests omitidos.
 - `ms-gateway` no tiene tests.
-- Los 28 tests de `ms-transfers` están en una sola clase, `TransferServiceTest`, y no usan base de datos real.
+- `ms-transfers` tiene 32 tests en tres clases: los 28 de `TransferServiceTest`, sin base de datos, y 4 con PostgreSQL real (`TransferPendingPersistenceIntegrationTest` y `PendingStatusMigrationTest`), añadidos en CAM-02 (4.11).
 
 ## 7. Riesgos y aspectos pendientes de investigación
 
@@ -822,11 +831,10 @@ Estos puntos son líneas de investigación y no deben considerarse defectos conf
 
 ## 8. Próximas actuaciones
 
-1. **Pendiente de código:** renombrar el estado `PENDIENTE` a `PENDIENTE_REVISION` para CAM-02 y los veredictos `REVISAR`. Afecta al enum `TransferStatus`, a la consulta del repositorio, a una migración para las filas ya guardadas, a los tests y a los documentos que mencionan el estado (4.11, `arquitectura.md`, `fraude.md`). **No está hecho.**
-2. Resolver los riesgos de prioridad Alta de la sección 7 (aprobación de CAM-02, reverso fallido y cargo y abono después del plazo de espera).
-3. Investigar el fallo del Gateway tras reiniciar un servicio (prioridad Media, sección 7).
-4. Medir el efecto de la fila bloqueada durante llamadas HTTP (prioridad Media, sección 7).
-5. Seguir documentando las incidencias pendientes con el mismo formato: impacto, causa, corrección y verificación.
+1. Resolver los riesgos de prioridad Alta de la sección 7 (aprobación de CAM-02, reverso fallido y cargo y abono después del plazo de espera).
+2. Investigar el fallo del Gateway tras reiniciar un servicio (prioridad Media, sección 7).
+3. Medir el efecto de la fila bloqueada durante llamadas HTTP (prioridad Media, sección 7).
+4. Seguir documentando las incidencias pendientes con el mismo formato: impacto, causa, corrección y verificación.
 
 ---
 
