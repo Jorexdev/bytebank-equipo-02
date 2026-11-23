@@ -87,7 +87,7 @@ public class Transfer {
     }
 
     public void pending() {
-        this.status = TransferStatus.PENDIENTE;
+        this.status = TransferStatus.PENDIENTE_REVISION;
         this.rejectionReason = null;
     }
 

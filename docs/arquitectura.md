@@ -61,8 +61,8 @@ Todos los servicios devuelven los errores así:
 2. ms-transfers comprueba los datos y que la cuenta de origen pertenezca al cliente.
 3. Envía la operación a ms-fraud (`POST /internal/fraud/check`).
 4. Si el veredicto es `BLOQUEADA`, la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado y no se mueve dinero.
-5. Si el veredicto es `REVISAR`, queda `PENDIENTE` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
-6. Si el veredicto es `APROBADA`, sigue el flujo normal. Si el importe supera los 5.000 €, también queda `PENDIENTE` por la regla de CAM-02.
+5. Si el veredicto es `REVISAR`, queda `PENDIENTE_REVISION` y no se mueve dinero hasta que un gestor la aprueba o la rechaza. Los gestores consultan las pendientes en `GET /api/transfers/pending`.
+6. Si el veredicto es `APROBADA`, sigue el flujo normal. Si el importe supera los 5.000 €, también queda `PENDIENTE_REVISION` por la regla de CAM-02.
 7. Calcula la comisión: 0,5 % del importe con un mínimo de 1,00 € si el destino es de otra entidad; cero si es de ByteBank.
 8. Carga el importe y la comisión en la cuenta de origen (`POST /internal/accounts/debit`). ms-accounts crea el movimiento de la transferencia y otro de tipo `COMISION` (`TRF-<id>-COM`) en la misma transacción.
 9. Si el destino es de ByteBank, lo abona en la cuenta de destino (`POST /internal/accounts/credit`).
@@ -72,8 +72,8 @@ Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no
 dinero. La aprobación de un gestor no repite la validación antifraude. La comisión no cuenta para las reglas
 antifraude ni para el umbral de 5.000 €.
 
-El estado de espera se llama `PENDIENTE` en el código actual. Está previsto renombrarlo a `PENDIENTE_REVISION`;
-el cambio de código todavía no está aplicado (ver [diagnostico.md](diagnostico.md), sección 8).
+El estado de espera se llamaba `PENDIENTE` hasta CAM-02; ahora es `PENDIENTE_REVISION`, y la migración V3 de
+ms-transfers cambió las filas existentes (ver [diagnostico.md](diagnostico.md), sección 4.11).
 
 Las transferencias a otras entidades solo cargan en origen, incluida la comisión: la liquidación con el otro banco queda fuera de este sistema.
 

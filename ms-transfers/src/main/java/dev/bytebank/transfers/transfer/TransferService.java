@@ -127,7 +127,7 @@ public class TransferService {
     private Transfer findPending(Long id) {
         Transfer transfer = transfers.findById(id)
                 .orElseThrow(() -> ApiException.notFound("TRANSFERENCIA_NO_ENCONTRADA", "No existe la transferencia " + id));
-        if (transfer.getStatus() != TransferStatus.PENDIENTE) {
+        if (transfer.getStatus() != TransferStatus.PENDIENTE_REVISION) {
             throw notPending();
         }
         return transfer;
@@ -175,7 +175,7 @@ public class TransferService {
 
     /** Transfers waiting for a gestor's decision. Only gestors can list them. */
     public PageResponse<TransferResponse> listPending(int page, int size) {
-        var result = transfers.findByStatus(TransferStatus.PENDIENTE, PageRequest.of(page, size, NEWEST_FIRST));
+        var result = transfers.findByStatus(TransferStatus.PENDIENTE_REVISION, PageRequest.of(page, size, NEWEST_FIRST));
         return PageResponse.of(result, TransferResponse::from);
     }
 }
