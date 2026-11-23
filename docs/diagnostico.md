@@ -1,7 +1,7 @@
 # Diagnóstico del proyecto ByteBank
 
 **Fecha de revisión inicial:** 10 de noviembre de 2026  
-**Estado:** diagnóstico inicial, pendiente de completar durante los sprints.
+**Última actualización:** 22 de noviembre de 2026. El estado de cada incidencia se ha contrastado con el código y las pruebas que hay hoy en `main`.
 
 ## 1. Objetivo
 
@@ -154,7 +154,7 @@ AUTH_URL: http://ms-auth:8081
 
 ### 4.3. Configuración de integración continua
 
-**Estado:** configuración anterior corregida en la rama `ci/CI-01-real-tests-docker`. Pendiente de verificar mediante GitHub Actions.
+**Estado:** corregido y verificado. El workflow está en `.github/workflows/ci.yml` y pasa en GitHub Actions.
 
 En el archivo `.github/workflows/ci.yml` se identificó una configuración que ejecutaba:
 
@@ -183,11 +183,11 @@ Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución globa
 - Los demás módulos independientes completaron correctamente su ejecución.
 - Se construyeron correctamente las imágenes Docker de los siete microservicios.
 
-**Pendiente:** publicar la rama, comprobar la ejecución de ambos trabajos en GitHub Actions y configurar, si procede, los controles de protección de la rama para exigir que las comprobaciones sean satisfactorias antes de integrar cambios.
+**Pendiente:** solo si procede, configurar los controles de protección de la rama para exigir que las comprobaciones sean satisfactorias antes de integrar cambios.
 
 ### 4.4. BUG-01 — Transferencia con importe negativo
 
-**Estado:** corregido en código, pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** permite mover dinero en el sentido contrario al esperado.
 
 **Causa:** el importe no se validaba. Restar un negativo suma, y sumar un negativo resta.
@@ -203,7 +203,7 @@ Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución globa
 
 ### 4.5. BUG-02 — IBAN inexistente devuelve 500
 
-**Estado:** corregido en código, pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** consultar una cuenta que no existe devuelve error de servidor, y una transferencia desde una cuenta inexistente responde 503.
 
 **Causa:** `AccountService.get` sacaba el valor de un `Optional` vacío con `.get()`. Eso lanzaba una excepción no controlada y acababa en `500 ERROR_INTERNO`. Al transferir, el 500 remoto se traducía en `503 SERVICIO_NO_DISPONIBLE`.
@@ -281,7 +281,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 ### 4.8. Extracto: falta un movimiento en cada página
 
-**Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** el extracto se saltaba un movimiento al principio de cada página, así que el cliente nunca veía todos sus movimientos.
 
 **Causa:** `MovementService.statement` calculaba el desplazamiento como `page * size + 1`, suponiendo que `OFFSET` en PostgreSQL empieza en 1. Pero empieza en 0, así que la primera página arrancaba en el segundo movimiento.
@@ -290,9 +290,11 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Verificación:** test `firstPageStartsAtOffsetZero` en `MovementServiceTest`.
 
-### 4.9. Extracto: el filtro por fechas no incluye el último día
+**Nota:** el commit `71ff272` de la PR #9 etiqueta esta corrección como `BUG-04`, pero la tarjeta BUG-04 era el filtro por fechas (ver 4.9). El código de esta tarjeta no se ha confirmado en el repositorio.
 
-**Estado:** corregido en código (rama `fix/date-filter-does-not-show-the-most-recent-day`), pendiente de probar en el entorno.
+### 4.9. BUG-04 — Extracto: el filtro por fechas no incluye el último día
+
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** al filtrar el extracto con `to`, los movimientos de ese día no aparecían. Además, los límites del rango se calculaban en UTC, de modo que los movimientos hechos entre las 00:00 y las 01:00/02:00 (hora de Madrid) caían en el día anterior.
 
 **Causa:** el fin del rango se calculaba como `to` a las 00:00 UTC y se trataba como exclusivo. El test `filterByDateIncludesLastDay` que lo detectaba estaba deshabilitado (ver 6.2).
@@ -345,6 +347,8 @@ El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque
 - Prueba por la API: transferencia de 6.000 € → `PENDIENTE` con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
 
 **Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
+
+**Pendiente:** el estado `PENDIENTE` se llamará `PENDIENTE_REVISION` para que se distinga del resto. Es un cambio de código, todavía no aplicado; ver sección 8.
 
 ### 4.12. SEG-02 — Secretos en el repositorio
 
@@ -515,7 +519,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Estado:** implementado y verificado en el entorno local.
 
-**Impacto:** la emisión de tarjetas ya estaba hecha (CAM-01), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
+**Impacto:** las cuentas compartidas ya estaban hechas (CAM-01, ver 4.22), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
 
 **Corrección:**
 
@@ -709,23 +713,45 @@ Las tablas y columnas de cada servicio están en sus migraciones de Flyway (`src
 - Los movimientos no guardan quién los hizo. Si el gestor de la demo hizo ingresos en cuentas reales, bloqueó cuentas o aprobó transferencias, el procedimiento de limpieza no lo detecta: hay que revisar las operaciones de gestor del periodo en que el entorno tuvo el perfil `demo`.
 - El procedimiento de limpieza no se ha ejecutado contra una base con datos reales mezclados. La lista de datos afectados se ha revisado contra las migraciones de cada servicio.
 
+### 4.21. BUG-05 — Saldo con decimales de coma flotante
+
+**Estado:** corregido y verificado con pruebas automatizadas.
+
+**Impacto:** dos ingresos de 0,10 € y 0,20 € mostraban un saldo de 0,30000000000000004 €. Contabilidad veía que los saldos no cuadraban.
+
+**Causa:** el saldo y los importes se guardaban como `double`. La suma de decimales en coma flotante no es exacta.
+
+**Corrección:** PR #6. El saldo y los importes pasaron a `BigDecimal` con escala 2, y la migración `V4__saldos_bigdecimal.sql` convirtió las columnas `balance` y `balance_after` de `DOUBLE PRECISION` a `NUMERIC(19,2)`.
+
+**Verificación:** `DepositPrecisionIntegrationTest` (ms-accounts) reproduce el caso de la tarjeta: saldo final exactamente `0.30`, saldos intermedios `0.10` y `0.30` en el extracto, e ingresos simultáneos sin pérdida de céntimos.
+
+### 4.22. CAM-01 — Cuentas compartidas
+
+**Estado:** implementado y verificado en el entorno local.
+
+**Comportamiento:** una cuenta puede tener hasta cuatro titulares. Quien la abre es el primer titular, y cualquier titular puede añadir a otro cliente por su email con `POST /api/accounts/{iban}/holders`.
+
+- Todos los titulares ven la cuenta y el extracto, pueden transferir desde ella y pedir tarjetas.
+- Si la cuenta está llena, el alta se rechaza; si el email no existe, también.
+- El alta bloquea la fila de la cuenta para que dos altas simultáneas no superen el máximo.
+- La relación vive en `account_holders` (migración `V5__account_holders.sql`); `accounts` ya no guarda `owner_id`.
+- `GET /api/accounts/{iban}/holders` devuelve los titulares.
+
+**Verificación:** `AccountHoldersIntegrationTest` comprueba que el creador queda como titular, que todos pueden leer la cuenta y que aparece en la lista de cada uno; `AccountHolderLimitIntegrationTest.concurrentAddsNeverExceedFourHolders` comprueba que varias altas a la vez no pasan de cuatro.
+
 ## 5. Funcionalidades incompletas identificadas
 
-El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
+El equipo anterior dejó escritas estas limitaciones en el README. Todas están ya resueltas y verificadas:
 
-| Área             | Estado descrito en el README                                                     |
-| ---------------- | -------------------------------------------------------------------------------- |
-| ms-cards         | Permite listar y bloquear tarjetas, pero emitir y pagar devuelve HTTP 501.       |
-| ms-fraud         | Integrado en `ms-transfers` con las reglas de importe, externa y frecuencia.     |
-| Antifraude       | Reglas de importe máximo, transferencia externa y frecuencia implementadas.      |
-| ms-notifications | Consume eventos Kafka y guarda avisos, pero falta el endpoint para consultarlos. |
-| Extractos        | Se han recibido quejas sobre movimientos que no aparecen correctamente.          |
+| Área | Limitación heredada | Estado actual |
+|---|---|---|
+| ms-cards | Emitir y pagar devolvía HTTP 501 | Emisión disponible y pago implementado y verificado (TAR-01, 4.16) |
+| ms-fraud | Integración y reglas pendientes de verificar | Integrado y verificado (4.13, 4.14) |
+| Antifraude | Reglas por implementar | Importe máximo, externa y frecuencia implementadas (4.13, 4.14) |
+| ms-notifications | Falta el endpoint para consultar avisos | `GET /api/notifications` implementado (KAF-01, 4.15) |
+| Extractos | Movimientos que no aparecían correctamente | Dos defectos corregidos: paginación (4.8) y filtro de fechas (BUG-04, 4.9) |
 
-Estas limitaciones están documentadas por el equipo anterior, pero deben verificarse con pruebas durante el desarrollo.
-
-Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.8 y 4.9.
-
-**Actualización:** ms-cards ya permite emitir tarjetas (CAM-01) y pagar con ellas (TAR-01, 4.16), y ms-notifications tiene el endpoint para consultar los avisos (KAF-01, 4.15).
+Las cuentas compartidas (CAM-01) están descritas en 4.22.
 
 ## 6. Pruebas y cobertura inicial
 
@@ -784,41 +810,48 @@ En los informes de pruebas revisados se han identificado:
 
 Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución general, aunque no se dispone en este inventario de un recuento individual de sus tests.
 
-**Conclusión:** el principal bloqueo de las pruebas automatizadas se encuentra en `ms-accounts`, debido a la migración V3. También queda pendiente revisar el test de filtrado por fecha que está deshabilitado.
+**Conclusión histórica:** en la ejecución inicial el bloqueo estaba en `ms-accounts` por la migración V3, y había un test de filtrado deshabilitado.
 
-**Actualización:** la migración V3 está corregida (4.1) y el test de filtrado por fecha se ha sustituido por uno que ya no se omite (4.9).
+**Estado actual:** la migración V3 está corregida (4.1) y el test de filtrado se sustituyó por otros que se ejecutan y pasan (4.9). Las cifras de esta sección no describen el estado actual; ver los recuentos de cada sección 4.x y la CI en GitHub Actions.
 
 ## 7. Riesgos y aspectos pendientes de investigación
 
-Los siguientes puntos requieren una revisión específica:
+Los siguientes puntos requieren una revisión específica. La prioridad indica por cuál conviene empezar; no convierte una línea de investigación en un defecto confirmado.
 
-- **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
-- **Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
-- **Alta de gestores:** resuelto (SEG-03, 4.20). El primer gestor de un entorno real se crea con `BOOTSTRAP_GESTOR_*`, sin contraseña por defecto. Los servicios no arrancan con `demo` y `prod` a la vez, y ms-auth no arranca con `prod` si hay usuarios de la demo. Queda pendiente un endpoint para cambiar la contraseña y otro para dar de alta más gestores.
-- **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
-- **Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos. Queda verificar los redondeos.
-- **Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
-- **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
-- **Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
-- **Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
-- **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes. Con los siete servicios arrancando a la vez, cada uno tarda entre 75 y 97 s en el equipo de pruebas (SEG-03, 4.20).
-- **Gateway y reinicios de servicios:** en las pruebas de SEG-03 se paró ms-auth y, al volver, Docker le asignó otra IP. ms-gateway siguió enviando las peticiones a la IP antigua (`Connection refused: ms-auth/172.20.0.7:8081`) y respondía 500 hasta que se reinició el propio gateway. Probablemente es la caché de DNS o el pool de conexiones de Reactor Netty; no se ha investigado. Mientras tanto, después de recrear un servicio hay que reiniciar ms-gateway.
-- **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
-- **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
+- **Prioridad: Baja. Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
+- **Prioridad: Media. Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
+- **Prioridad: Media. Alta de gestores:** resuelto (SEG-03, 4.20). El primer gestor de un entorno real se crea con `BOOTSTRAP_GESTOR_*`, sin contraseña por defecto. Los servicios no arrancan con `demo` y `prod` a la vez, y ms-auth no arranca con `prod` si hay usuarios de la demo. Queda pendiente un endpoint para cambiar la contraseña y otro para dar de alta más gestores.
+- **Prioridad: Media. JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
+- **Prioridad: Media. Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos; los importes van en `BigDecimal` (BUG-05, 4.21). Queda comprobar los redondeos en los límites de la comisión.
+- **Prioridad: Media. Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
+- **Prioridad: Baja. Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
+- **Prioridad: Media. Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
+- **Prioridad: Baja. Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
+- **Prioridad: Media. Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes. Con los siete servicios arrancando a la vez, cada uno tarda entre 75 y 97 s en el equipo de pruebas (SEG-03, 4.20).
+- **Prioridad: Alta. Gateway y reinicios de servicios:** en las pruebas de SEG-03 se paró ms-auth y, al volver, Docker le asignó otra IP. ms-gateway siguió enviando las peticiones a la IP antigua (`Connection refused: ms-auth/172.20.0.7:8081`) y respondía 500 hasta que se reinició el propio gateway. Probablemente es la caché de DNS o el pool de conexiones de Reactor Netty; no se ha investigado. Mientras tanto, después de recrear un servicio hay que reiniciar ms-gateway.
+- **Prioridad: Media. Fila bloqueada durante una llamada HTTP:** `CardService#pay` bloquea la fila de la tarjeta mientras llama a ms-accounts, y `AccountService#addHolder` bloquea la fila de la cuenta mientras comprueba el alta por HTTP. Si el otro servicio tarda, todas las operaciones que necesiten esa fila esperan. No se ha medido el efecto con carga real; de momento queda documentado como riesgo (4.16, 4.22).
+- **Prioridad: Baja. CI:** el workflow está verificado en GitHub Actions y sus dos trabajos pasan. Queda decidir si se exigen como comprobación obligatoria antes de integrar cambios (ver 4.3).
+- **Prioridad: Media. Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
 
 Estos puntos son líneas de investigación y no deben considerarse defectos confirmados hasta reproducirlos o verificar su causa.
 
 ## 8. Próximas actuaciones
 
-1. Resolver los problemas que impiden el arranque completo del entorno.
-2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
-3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
-4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
-5. ~~Investigar el test omitido por la incidencia de zona horaria.~~ Resuelto (4.9).
-6. Continuar investigando y documentando las incidencias funcionales y de seguridad pendientes.
-7. Implementar las funcionalidades pendientes según las tarjetas del backlog.
-8. Actualizar este documento con las correcciones realizadas y las pruebas que acrediten su funcionamiento.
+1. **Pendiente de código:** renombrar el estado `PENDIENTE` a `PENDIENTE_REVISION` para CAM-02 y los veredictos `REVISAR`. Afecta al enum `TransferStatus`, a la consulta del repositorio, a una migración para las filas ya guardadas, a los tests y a los documentos que mencionan el estado (4.11, `arquitectura.md`, `fraude.md`). **No está hecho.**
+2. Completar las descripciones de las PR #5, #6, #11 y #16: qué fallaba, cómo se reproducía y cuál era la causa. Las PR #20 y #22 son el ejemplo de formato.
+3. Investigar el fallo del Gateway tras reiniciar un servicio (prioridad Alta, sección 7).
+4. Medir el efecto de la fila bloqueada durante llamadas HTTP (prioridad Media, sección 7).
+5. Decidir si se exigen las comprobaciones de CI como obligatorias antes de integrar cambios (4.3).
+6. Seguir documentando las incidencias pendientes con el mismo formato: impacto, causa, corrección y verificación.
 
 ---
 
-**Nota:** este documento representa el diagnóstico inicial del equipo. Los hallazgos se irán actualizando conforme avance la investigación y se completen las tareas.
+**Nota:** este documento es el diagnóstico del equipo, actualizado el 22 de noviembre de 2026. Las incidencias marcadas como verificadas se han contrastado con las pruebas o con la ejecución descrita en cada sección.
+
+## Fuentes
+
+- Código y pruebas de cada incidencia: rutas indicadas en la sección 4 correspondiente.
+- Estados y decisiones: [decisiones.md](decisiones.md).
+- Diseño de servicios y mensajería: [arquitectura.md](arquitectura.md).
+- Reglas de fraude: [fraude.md](fraude.md).
+- Workflow de CI: `.github/workflows/ci.yml`.
