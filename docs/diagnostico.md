@@ -1,7 +1,7 @@
 # Diagnóstico del proyecto ByteBank
 
 **Fecha de revisión inicial:** 10 de noviembre de 2026  
-**Estado:** diagnóstico inicial, pendiente de completar durante los sprints.
+**Última actualización:** 22 de noviembre de 2026. El estado de cada incidencia se ha contrastado con el código y las pruebas que hay hoy en `main`.
 
 ## 1. Objetivo
 
@@ -154,7 +154,7 @@ AUTH_URL: http://ms-auth:8081
 
 ### 4.3. Configuración de integración continua
 
-**Estado:** configuración anterior corregida en la rama `ci/CI-01-real-tests-docker`. Pendiente de verificar mediante GitHub Actions.
+**Estado:** corregido y verificado. El workflow está en `.github/workflows/ci.yml` y pasa en GitHub Actions.
 
 En el archivo `.github/workflows/ci.yml` se identificó una configuración que ejecutaba:
 
@@ -183,11 +183,11 @@ Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución globa
 - Los demás módulos independientes completaron correctamente su ejecución.
 - Se construyeron correctamente las imágenes Docker de los siete microservicios.
 
-**Pendiente:** publicar la rama, comprobar la ejecución de ambos trabajos en GitHub Actions y configurar, si procede, los controles de protección de la rama para exigir que las comprobaciones sean satisfactorias antes de integrar cambios.
+**Protección de ramas:** `main` y `develop` están protegidas y exigen "Maven tests" y "Build Docker images" para integrar cambios. Los administradores del repositorio pueden saltarse la protección.
 
 ### 4.4. BUG-01 — Transferencia con importe negativo
 
-**Estado:** corregido en código, pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** permite mover dinero en el sentido contrario al esperado.
 
 **Causa:** el importe no se validaba. Restar un negativo suma, y sumar un negativo resta.
@@ -203,7 +203,7 @@ Ambos trabajos se ejecutan en paralelo. Si cualquiera falla, la ejecución globa
 
 ### 4.5. BUG-02 — IBAN inexistente devuelve 500
 
-**Estado:** corregido en código, pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** consultar una cuenta que no existe devuelve error de servidor, y una transferencia desde una cuenta inexistente responde 503.
 
 **Causa:** `AccountService.get` sacaba el valor de un `Optional` vacío con `.get()`. Eso lanzaba una excepción no controlada y acababa en `500 ERROR_INTERNO`. Al transferir, el 500 remoto se traducía en `503 SERVICIO_NO_DISPONIBLE`.
@@ -281,7 +281,7 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 ### 4.8. Extracto: falta un movimiento en cada página
 
-**Estado:** corregido en código (rama `fix/transactions-missing-statement`), pendiente de probar en el entorno.
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** el extracto se saltaba un movimiento al principio de cada página, así que el cliente nunca veía todos sus movimientos.
 
 **Causa:** `MovementService.statement` calculaba el desplazamiento como `page * size + 1`, suponiendo que `OFFSET` en PostgreSQL empieza en 1. Pero empieza en 0, así que la primera página arrancaba en el segundo movimiento.
@@ -290,9 +290,11 @@ Al transferir hacia una cuenta bloqueada, el sistema cobraba a la cuenta de orig
 
 **Verificación:** test `firstPageStartsAtOffsetZero` en `MovementServiceTest`.
 
-### 4.9. Extracto: el filtro por fechas no incluye el último día
+**Nota:** el commit `71ff272` de la PR #9 lleva la etiqueta `BUG-04`, pero corrige la paginación; la tarjeta BUG-04 es el filtro por fechas (4.9).
 
-**Estado:** corregido en código (rama `fix/date-filter-does-not-show-the-most-recent-day`), pendiente de probar en el entorno.
+### 4.9. BUG-04 — Extracto: el filtro por fechas no incluye el último día
+
+**Estado:** corregido y verificado con pruebas automatizadas.
 **Impacto:** al filtrar el extracto con `to`, los movimientos de ese día no aparecían. Además, los límites del rango se calculaban en UTC, de modo que los movimientos hechos entre las 00:00 y las 01:00/02:00 (hora de Madrid) caían en el día anterior.
 
 **Causa:** el fin del rango se calculaba como `to` a las 00:00 UTC y se trataba como exclusivo. El test `filterByDateIncludesLastDay` que lo detectaba estaba deshabilitado (ver 6.2).
@@ -327,11 +329,11 @@ El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque
 
 **Estado:** implementado y verificado en el entorno local.
 
-**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
+**Comportamiento:** las transferencias de más de 5.000 € no se ejecutan al crearse. Quedan en estado `PENDIENTE_REVISION`, sin mover dinero, hasta que un gestor las aprueba o las rechaza.
 
 **Cambios aplicados:**
 
-- Nuevo estado `PENDIENTE` para la transferencia.
+- Nuevo estado para la transferencia. Al implementarse se llamó `PENDIENTE`; hoy es `PENDIENTE_REVISION` (ver «Cambio de nombre» más abajo).
 - Al crear una transferencia de más de 5.000 € se guarda como pendiente y no se llama a ms-accounts.
 - Nuevos endpoints `POST /api/transfers/{id}/approve` y `POST /api/transfers/{id}/reject`, solo para el rol `GESTOR`.
 - Aprobar ejecuta el mismo flujo que una transferencia normal, incluida la comprobación de destino y el reverso de BUG-06. Rechazar deja el motivo `RECHAZADA_POR_GESTOR`.
@@ -342,9 +344,20 @@ El ingreso en ventanilla (`AccountService.deposit`) usa el mismo bloqueo, porque
 **Verificación:**
 
 - Tests automáticos: 17 en `TransferServiceTest`.
-- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
+- Prueba por la API: transferencia de 6.000 € → `PENDIENTE` (hoy `PENDIENTE_REVISION`) con los saldos intactos; Ana recibe 403 al intentar aprobarla; el gestor la aprueba y el dinero se mueve; otra transferencia se rechaza con `RECHAZADA_POR_GESTOR` sin mover dinero; aprobar una ya rechazada devuelve 409.
 
 **Límite:** si el proceso se interrumpe entre el cambio de estado y la ejecución, la transferencia puede quedar `COMPLETADA` sin haber movido el dinero; se detecta por el extracto y se corrige a mano.
+
+**Cambio de nombre a `PENDIENTE_REVISION`:** resuelto. El estado se llamaba `PENDIENTE`, pero el nombre acordado en la tarjeta es `PENDIENTE_REVISION`. Es el mismo estado que reciben las transferencias con veredicto `REVISAR` (4.13).
+
+- `TransferStatus`, `Transfer.pending()`, `TransferService` y la consulta JPQL de `TransferRepository.updateStatusIfPending` usan el nuevo estado.
+- Migración `V3__rename_pending_status.sql`: las filas guardadas como `PENDIENTE` pasan a `PENDIENTE_REVISION`. La columna `status` es `VARCHAR(30)` sin restricción `CHECK`, así que basta con un `UPDATE`.
+- El código de error `TRANSFERENCIA_NO_PENDIENTE` no cambia: es parte del contrato de la API.
+- Primero se subió el test en rojo (ejecución #106 de la CI sobre `40840ab`) y después el arreglo (ejecución #107, en verde, sobre `eab3358`).
+- Tests: tres asserts de `TransferServiceTest` (más de 5.000 €, veredicto `REVISAR` y listado de pendientes). `TransferPendingPersistenceIntegrationTest`, con PostgreSQL real, comprueba el valor guardado en la columna, el listado de pendientes y que la consulta JPQL solo deja decidir una vez. `PendingStatusMigrationTest` deja la base en V2, inserta una fila `PENDIENTE` y comprueba que la V3 la cambia a `PENDIENTE_REVISION` sin tocar las `COMPLETADA` ni las `RECHAZADA`. `./mvnw clean verify`: 191 tests, 0 fallos.
+- Prueba de punta a punta (23/11/2026), con el stack completo levantado aparte, una base de datos vacía e imágenes construidas desde la rama: Flyway aplica la V3; una transferencia de 6.000 € y otra de 1.500 € a otra entidad (veredicto `REVISAR`) quedan `PENDIENTE_REVISION` sin mover dinero; el gestor ve las dos en `GET /api/transfers/pending` y Ana recibe 403; aprobar la primera la deja `COMPLETADA` y mueve los 6.000 €, y aprobarla otra vez da `409 TRANSFERENCIA_NO_PENDIENTE`; rechazar la segunda la deja `RECHAZADA` con `RECHAZADA_POR_GESTOR` sin mover dinero. 16 comprobaciones correctas y ningún error en los logs. Como la base estaba vacía, la migración de filas existentes la cubre `PendingStatusMigrationTest`.
+
+**Despliegue y vuelta atrás:** la V3 y el código nuevo se despliegan juntos. El código anterior no sabe leer `PENDIENTE_REVISION` y fallaría al cargar esas transferencias. Para volver a la versión anterior, antes de arrancarla hay que deshacer el cambio con `UPDATE transfers SET status = 'PENDIENTE' WHERE status = 'PENDIENTE_REVISION';`.
 
 ### 4.12. SEG-02 — Secretos en el repositorio
 
@@ -440,7 +453,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 - Nuevo `FraudClient` en ms-transfers; llama a `POST /internal/fraud/check` con la clave interna.
 - Cada transferencia se valida después de comprobar la titularidad y antes de guardarse o ejecutarse.
 - `BLOQUEADA`: la transferencia queda `RECHAZADA` con el código de la regla o reglas que hayan saltado. No se mueve dinero.
-- `REVISAR`: queda `PENDIENTE`, igual que las de más de 5.000 €. Un gestor la aprueba o la rechaza.
+- `REVISAR`: queda `PENDIENTE_REVISION`, igual que las de más de 5.000 €. Un gestor la aprueba o la rechaza.
 - `APROBADA`: sigue el flujo normal; si supera 5.000 €, CAM-02 la deja pendiente.
 - Si ms-fraud no responde, ms-transfers devuelve `503 SERVICIO_NO_DISPONIBLE` y no crea la transferencia ni mueve dinero. La decisión es de **fallo cerrado**: no se ejecuta una operación sin control antifraude y no se guarda un rechazo falso; el cliente puede reintentar.
 - La aprobación del gestor no repite la validación: se hizo al crear la transferencia.
@@ -450,7 +463,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 **Verificación:**
 
 - Tests automáticos: `./mvnw -pl ms-transfers,ms-fraud -am test` → 41 tests, 0 fallos. `TransferServiceTest` pasa de 18 a 22 tests; `AmountRuleTest` tiene 3.
-- API: 21.000 € → `RECHAZADA` / `IMPORTE_MAXIMO`; 20.000 € exactos → `RECHAZADA` / `IMPORTE_MAXIMO`; 1.500 € a otra entidad → `PENDIENTE` con veredicto `REVISAR` / `EXTERNA_IMPORTE_ALTO`; el gestor la aprueba y el dinero se mueve; 100 € interna → `COMPLETADA`; 6.000 € interna → `PENDIENTE` por CAM-02 y el gestor la rechaza.
+- API: 21.000 € → `RECHAZADA` / `IMPORTE_MAXIMO`; 20.000 € exactos → `RECHAZADA` / `IMPORTE_MAXIMO`; 1.500 € a otra entidad → `PENDIENTE` (hoy `PENDIENTE_REVISION`) con veredicto `REVISAR` / `EXTERNA_IMPORTE_ALTO`; el gestor la aprueba y el dinero se mueve; 100 € interna → `COMPLETADA`; 6.000 € interna → `PENDIENTE` (hoy `PENDIENTE_REVISION`) por CAM-02 y el gestor la rechaza.
 - Con ms-fraud parado, una transferencia devuelve `503 SERVICIO_NO_DISPONIBLE`, no crea la transferencia y no cambia el saldo.
 - `GET /api/fraud/checks` con un cliente devuelve 403; con un gestor, 200.
 
@@ -515,7 +528,7 @@ El secreto antiguo no aparece en ningún fichero del repositorio, tampoco en los
 
 **Estado:** implementado y verificado en el entorno local.
 
-**Impacto:** la emisión de tarjetas ya estaba hecha (CAM-01), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
+**Impacto:** la emisión de tarjetas para cualquier titular se añadió con las cuentas compartidas (CAM-01, ver 4.22), pero `POST /api/cards/{id}/payments` respondía 501. Los clientes no podían pagar con sus tarjetas.
 
 **Corrección:**
 
@@ -709,60 +722,69 @@ Las tablas y columnas de cada servicio están en sus migraciones de Flyway (`src
 - Los movimientos no guardan quién los hizo. Si el gestor de la demo hizo ingresos en cuentas reales, bloqueó cuentas o aprobó transferencias, el procedimiento de limpieza no lo detecta: hay que revisar las operaciones de gestor del periodo en que el entorno tuvo el perfil `demo`.
 - El procedimiento de limpieza no se ha ejecutado contra una base con datos reales mezclados. La lista de datos afectados se ha revisado contra las migraciones de cada servicio.
 
-## 5. Funcionalidades incompletas identificadas
+### 4.21. BUG-05 — Saldo con decimales de coma flotante
 
-El README, cuyo estado del proyecto está fechado en junio de 2026, reconoce las siguientes limitaciones:
+**Estado:** corregido y verificado con pruebas automatizadas.
 
-| Área             | Estado descrito en el README                                                     |
-| ---------------- | -------------------------------------------------------------------------------- |
-| ms-cards         | Permite listar y bloquear tarjetas, pero emitir y pagar devuelve HTTP 501.       |
-| ms-fraud         | Integrado en `ms-transfers` con las reglas de importe, externa y frecuencia.     |
-| Antifraude       | Reglas de importe máximo, transferencia externa y frecuencia implementadas.      |
-| ms-notifications | Consume eventos Kafka y guarda avisos, pero falta el endpoint para consultarlos. |
-| Extractos        | Se han recibido quejas sobre movimientos que no aparecen correctamente.          |
+**Impacto:** dos ingresos de 0,10 € y 0,20 € mostraban un saldo de 0,30000000000000004 €. Contabilidad veía que los saldos no cuadraban.
 
-Estas limitaciones están documentadas por el equipo anterior, pero deben verificarse con pruebas durante el desarrollo.
+**Causa:** el saldo y los importes se guardaban como `double`. La suma de decimales en coma flotante no es exacta.
 
-Las quejas sobre el extracto se corresponden con dos defectos ya corregidos: ver 4.8 y 4.9.
+**Corrección:** PR #6. El saldo y los importes pasaron a `BigDecimal` con escala 2, y la migración `V4__saldos_bigdecimal.sql` convirtió las columnas `balance` y `balance_after` de `DOUBLE PRECISION` a `NUMERIC(19,2)`.
 
-**Actualización:** ms-cards ya permite emitir tarjetas (CAM-01) y pagar con ellas (TAR-01, 4.16), y ms-notifications tiene el endpoint para consultar los avisos (KAF-01, 4.15).
+**Verificación:** `DepositPrecisionIntegrationTest` (ms-accounts) reproduce el caso de la tarjeta: saldo final exactamente `0.30`, saldos intermedios `0.10` y `0.30` en el extracto, e ingresos simultáneos sin pérdida de céntimos.
 
-## 6. Pruebas y cobertura inicial
+### 4.22. CAM-01 — Cuentas compartidas
 
-Se han localizado clases de prueba en los siguientes módulos:
+**Estado:** implementado y verificado en el entorno local.
 
-- `common`: pruebas de validación de IBAN.
-- `ms-accounts`: pruebas de integración y de movimientos.
-- `ms-fraud`: pruebas de reglas antifraude.
-- `ms-notifications`: pruebas relacionadas con los mensajes de notificación.
-- `ms-transfers`: pruebas del servicio de transferencias.
+**Comportamiento:** una cuenta puede tener hasta cuatro titulares. Quien la abre es el primer titular, y cualquier titular puede añadir a otro cliente por su email con `POST /api/accounts/{iban}/holders`.
 
-En la inspección inicial no se han localizado clases de prueba en `ms-auth`, `ms-gateway` ni `ms-cards`.
+- Todos los titulares ven la cuenta y el extracto, pueden transferir desde ella y pedir tarjetas.
+- Si la cuenta está llena, el alta se rechaza; si el email no existe, también.
+- El alta bloquea la fila de la cuenta para que dos altas simultáneas no superen el máximo.
+- La relación vive en `account_holders` (migración `V5__account_holders.sql`); `accounts` ya no guarda `owner_id`.
+- `GET /api/accounts/{iban}/holders` devuelve los titulares.
+
+**Verificación:** `AccountHoldersIntegrationTest` comprueba que el creador queda como titular, que todos pueden leer la cuenta y que aparece en la lista de cada uno; `AccountHolderLimitIntegrationTest.concurrentAddsNeverExceedFourHolders` comprueba que varias altas a la vez no pasan de cuatro.
+
+## 5. Funcionalidades heredadas y su estado
+
+El equipo anterior dejó escritas estas limitaciones en el README. Todas están ya resueltas y verificadas:
+
+| Área | Limitación heredada | Estado actual |
+|---|---|---|
+| ms-cards | Emitir y pagar devolvía HTTP 501 | Emisión disponible y pago implementado y verificado (TAR-01, 4.16) |
+| ms-fraud | Integración y reglas pendientes de verificar | Integrado y verificado (4.13, 4.14) |
+| Antifraude | Reglas por implementar | Importe máximo, externa y frecuencia implementadas (4.13, 4.14) |
+| ms-notifications | Falta el endpoint para consultar avisos | `GET /api/notifications` implementado (KAF-01, 4.15) |
+| Extractos | Movimientos que no aparecían correctamente | Dos defectos corregidos: paginación (4.8) y filtro de fechas (BUG-04, 4.9) |
+
+Las cuentas compartidas (CAM-01) están descritas en 4.22.
+
+## 6. Pruebas y cobertura
+
+Hay clases de prueba en `common` y en los seis servicios de negocio; `ms-gateway` no tiene ninguna. Los tests de integración de `ms-auth`, `ms-accounts`, `ms-transfers`, `ms-cards` y `ms-notifications` usan PostgreSQL real con Testcontainers, y los del outbox de `ms-accounts` también Kafka.
 
 La existencia de pruebas no garantiza que cubran todos los escenarios de negocio. Es necesario revisar su contenido, ejecución y resultados antes de valorar la cobertura real.
 
 ### 6.1. Resultados de las pruebas automatizadas
 
-**Nota:** las cifras de esta sección corresponden a la ejecución inicial del 10/11/2026 y no incluyen las correcciones posteriores. Para el estado actual, ver las secciones 4.x.
+**Fecha de ejecución:** 23/11/2026, con `./mvnw clean verify` sobre el código del commit `eab3358` (CAM-02, cambio a `PENDIENTE_REVISION`), con JDK 21 y compilación para Java 17. Resultado: `BUILD SUCCESS`. Las cifras salen de los informes de surefire de cada módulo.
 
-**Fecha de ejecución:** 10/11/2026.
+| Módulo             | Clases | Tests | Fallos | Errores | Omitidos |
+| ------------------ | -----: | ----: | -----: | ------: | -------: |
+| `common`           |      4 |    20 |      0 |       0 |        0 |
+| `ms-gateway`       |      0 |     0 |      0 |       0 |        0 |
+| `ms-auth`          |      6 |    23 |      0 |       0 |        0 |
+| `ms-accounts`      |     14 |    68 |      0 |       0 |        0 |
+| `ms-transfers`     |      3 |    32 |      0 |       0 |        0 |
+| `ms-cards`         |      7 |    25 |      0 |       0 |        0 |
+| `ms-fraud`         |      2 |     6 |      0 |       0 |        0 |
+| `ms-notifications` |      4 |    17 |      0 |       0 |        0 |
+| **Total**          |     41 |   191 |      0 |       0 |        0 |
 
-Se ejecutaron las pruebas mediante Maven. La primera ejecución general se detuvo al encontrar errores en `ms-accounts`. Posteriormente, se ejecutaron los módulos restantes utilizando `-am` para incluir las dependencias del reactor Maven.
-
-| Módulo             | Resultado | Observaciones                                                                      |
-| ------------------ | --------- | ---------------------------------------------------------------------------------- |
-| `common`           | Correcto  | 3 tests de `IbanTest` superados                                                    |
-| `ms-gateway`       | Correcto  | Ejecución completada en la ejecución general                                       |
-| `ms-auth`          | Correcto  | Ejecución completada en la ejecución general                                       |
-| `ms-accounts`      | Error     | 4 errores en `LedgerServiceIntegrationTest` por el fallo de Flyway V3              |
-| `ms-transfers`     | Correcto  | 4 tests de `TransferServiceTest` superados                                         |
-| `ms-cards`         | Correcto  | Ejecución completada; no se han localizado clases de test en el inventario inicial |
-| `ms-fraud`         | Correcto  | 2 tests de `AmountRuleTest` superados                                              |
-| `ms-notifications` | Correcto  | 2 tests de `NotificationMessagesTest` superados                                    |
-
-La ejecución de los módulos `common`, `ms-transfers`, `ms-cards`, `ms-fraud` y `ms-notifications` finalizó con `BUILD SUCCESS`.
-
-La primera ejecución general terminó con `BUILD FAILURE` al fallar `ms-accounts`, por lo que Maven no llegó a ejecutar los módulos posteriores.
+**Ejecución inicial (10/11/2026):** 12 tests superados y 4 errores en `LedgerServiceIntegrationTest` de `ms-accounts`, porque la migración V3 impedía arrancar el contexto (4.1).
 
 ### 6.2. Test omitido por incidencia de zona horaria
 
@@ -776,49 +798,52 @@ El origen estaba en la implementación: el fin del rango era exclusivo y se calc
 
 ### 6.3. Resumen de resultados
 
-En los informes de pruebas revisados se han identificado:
-
-- 12 tests superados con resultados detallados.
-- 4 errores en pruebas de integración de `ms-accounts`.
-- 1 test omitido por una incidencia de zona horaria.
-
-Además, `ms-gateway` y `ms-auth` completaron correctamente la ejecución general, aunque no se dispone en este inventario de un recuento individual de sus tests.
-
-**Conclusión:** el principal bloqueo de las pruebas automatizadas se encuentra en `ms-accounts`, debido a la migración V3. También queda pendiente revisar el test de filtrado por fecha que está deshabilitado.
-
-**Actualización:** la migración V3 está corregida (4.1) y el test de filtrado por fecha se ha sustituido por uno que ya no se omite (4.9).
+- 191 tests superados en 41 clases, sin fallos, errores ni tests omitidos.
+- `ms-gateway` no tiene tests.
+- `ms-transfers` tiene 32 tests en tres clases: los 28 de `TransferServiceTest`, sin base de datos, y 4 con PostgreSQL real (`TransferPendingPersistenceIntegrationTest` y `PendingStatusMigrationTest`), añadidos en CAM-02 (4.11).
 
 ## 7. Riesgos y aspectos pendientes de investigación
 
-Los siguientes puntos requieren una revisión específica:
+Los siguientes puntos requieren una revisión específica. La prioridad indica por cuál conviene empezar; no convierte una línea de investigación en un defecto confirmado.
 
-- **Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
-- **Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
-- **Alta de gestores:** resuelto (SEG-03, 4.20). El primer gestor de un entorno real se crea con `BOOTSTRAP_GESTOR_*`, sin contraseña por defecto. Los servicios no arrancan con `demo` y `prod` a la vez, y ms-auth no arranca con `prod` si hay usuarios de la demo. Queda pendiente un endpoint para cambiar la contraseña y otro para dar de alta más gestores.
-- **JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
-- **Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos. Queda verificar los redondeos.
-- **Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
-- **Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
-- **Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
-- **Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
-- **Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes. Con los siete servicios arrancando a la vez, cada uno tarda entre 75 y 97 s en el equipo de pruebas (SEG-03, 4.20).
-- **Gateway y reinicios de servicios:** en las pruebas de SEG-03 se paró ms-auth y, al volver, Docker le asignó otra IP. ms-gateway siguió enviando las peticiones a la IP antigua (`Connection refused: ms-auth/172.20.0.7:8081`) y respondía 500 hasta que se reinició el propio gateway. Probablemente es la caché de DNS o el pool de conexiones de Reactor Netty; no se ha investigado. Mientras tanto, después de recrear un servicio hay que reiniciar ms-gateway.
-- **CI:** verificar la ejecución del nuevo workflow en GitHub Actions y la obligatoriedad de sus comprobaciones antes de integrar cambios.
-- **Zonas horarias:** la incidencia del test `filterByDateIncludesLastDay` está resuelta (4.9). Queda comprobar que el resto de servicios trate las fechas con la misma zona (`bytebank.zone`).
+- **Prioridad: Alta. Aprobación de CAM-02:** al aprobar, el estado pasa a `COMPLETADA` antes de mover el dinero. Si después falla la consulta de la cuenta de destino (no existe o ms-accounts no responde) o el proceso se corta, la transferencia queda completada sin cargo ni abono. Se detecta por el extracto y se corrige a mano (4.11). Detectado en el código; no reproducido en el entorno.
+- **Prioridad: Alta. Reverso fallido:** si falla el abono y después también el reverso del cargo, la transferencia queda `RECHAZADA` con el dinero cargado en el origen y solo queda un error en el log. No tiene un estado propio para conciliarla a mano (4.7).
+- **Prioridad: Alta. Cargo después del plazo de espera:** ms-transfers espera como mucho 5 s la respuesta de ms-accounts. Si el cargo tarda más, la transferencia queda `RECHAZADA` con `SERVICIO_NO_DISPONIBLE`, pero ms-accounts puede completar el cargo después: el cliente pierde el dinero y la transferencia no consta como hecha. Detectado en el código; no reproducido en el entorno.
+- **Prioridad: Alta. Abono después del plazo de espera:** si el abono en la cuenta de destino tarda más de 5 s, ms-transfers devuelve el importe al origen y marca la transferencia `RECHAZADA`, pero ms-accounts puede completar el abono después: el dinero queda en las dos cuentas. Detectado en el código; no reproducido en el entorno.
+- **Prioridad: Baja. Seguridad:** las incidencias SEG-01 (acceso a cuentas, movimientos y transferencias de otros usuarios) y SEG-02 (secretos en el repositorio) están corregidas y verificadas.
+- **Prioridad: Media. Credenciales:** revisado en SEG-02 (4.12). No quedan secretos en el código ni en configuraciones versionadas. Sería conveniente añadir a la CI un escáner de secretos (por ejemplo, gitleaks) para evitar que vuelva a ocurrir.
+- **Prioridad: Media. Alta de gestores:** resuelto (SEG-03, 4.20). El primer gestor de un entorno real se crea con `BOOTSTRAP_GESTOR_*`, sin contraseña por defecto. Los servicios no arrancan con `demo` y `prod` a la vez, y ms-auth no arranca con `prod` si hay usuarios de la demo. Queda pendiente un endpoint para cambiar la contraseña y otro para dar de alta más gestores.
+- **Prioridad: Media. JWT con secreto compartido:** los tokens se firman con HS256, así que todos los servicios conocen el secreto y cualquiera de ellos podría emitir tokens. Una alternativa es RS256: ms-auth firma con una clave privada y el resto valida con la pública.
+- **Prioridad: Media. Transferencias:** los importes negativos (BUG-01, 4.4) y el abono fallido que perdía el dinero (BUG-06, 4.7) están corregidos; los importes van en `BigDecimal` (BUG-05, 4.21). El redondeo de la comisión a céntimos está cubierto por el test `feeRoundsToTheNearestCent` (SOR-01, 4.19).
+- **Prioridad: Media. Concurrencia:** los cargos, abonos e ingresos simultáneos sobre una misma cuenta están resueltos (CON-01, 4.10). Queda comprobar el resto de operaciones.
+- **Prioridad: Baja. Antifraude:** la integración con `ms-fraud` está hecha y verificada (4.13) y la regla de frecuencia está implementada (4.14). El comportamiento ante un fallo de ms-fraud está decidido: `503` y no se ejecuta la transferencia.
+- **Prioridad: Media. Kafka:** resuelto. Los eventos se publican después del commit mediante un outbox (KAF-02, 4.18) y ms-notifications ignora los repetidos (KAF-03, 4.17). Queda pendiente vigilar el tamaño de `outbox_events` y los eventos con muchos intentos fallidos si se añade monitorización, y valorar un backoff en los reintentos del relay.
+- **Prioridad: Baja. Notificaciones:** consulta de avisos (KAF-01, 4.15) e idempotencia (KAF-03, 4.17) resueltas y verificadas.
+- **Prioridad: Media. Docker:** revisar las dependencias de arranque, la configuración de los servicios y los tamaños de las imágenes. Con los siete servicios arrancando a la vez, cada uno tarda entre 75 y 97 s en el equipo de pruebas (SEG-03, 4.20).
+- **Prioridad: Media. Gateway y reinicios de servicios:** en las pruebas de SEG-03 se paró ms-auth y, al volver, Docker le asignó otra IP. ms-gateway siguió enviando las peticiones a la IP antigua (`Connection refused: ms-auth/172.20.0.7:8081`) y respondía 500 hasta que se reinició el propio gateway. Probablemente es la caché de DNS o el pool de conexiones de Reactor Netty; no se ha investigado. Mientras tanto, después de recrear un servicio hay que reiniciar ms-gateway.
+- **Prioridad: Media. Fila bloqueada durante una llamada HTTP:** `CardService#pay` bloquea la fila de la tarjeta mientras llama a ms-accounts, y `AccountService#addHolder` bloquea la fila de la cuenta mientras comprueba el alta por HTTP. Si el otro servicio tarda, todas las operaciones que necesiten esa fila esperan. No se ha medido el efecto con carga real; de momento queda documentado como riesgo (4.16, 4.22).
+- **Prioridad: Baja. CI:** resuelto. El workflow pasa en GitHub Actions y sus dos trabajos son obligatorios para integrar en `main` y `develop` (4.3).
+- **Prioridad: Baja. Zonas horarias:** resuelto (4.9). El extracto, la limpieza del outbox y el límite diario de las tarjetas usan `bytebank.zone` (`Europe/Madrid`). Ningún otro servicio trabaja con fechas de negocio: guardan instantes en UTC.
+- **Prioridad: Baja. Comisión recalculada:** la comisión no se guarda en la transferencia; se recalcula con la tarifa vigente. Si la tarifa cambiara, una transferencia antigua mostraría una comisión distinta de la cobrada, y una pendiente se cobraría con la tarifa nueva (4.19).
+- **Prioridad: Baja. Aviso de comisión:** ms-notifications no tiene texto propio para `COMISION`. El aviso usa el texto genérico, con el importe en negativo: «Movimiento de -1,00 € en tu cuenta ···0001 (Comisión por transferencia). Saldo: …» (4.19).
 
 Estos puntos son líneas de investigación y no deben considerarse defectos confirmados hasta reproducirlos o verificar su causa.
 
 ## 8. Próximas actuaciones
 
-1. Resolver los problemas que impiden el arranque completo del entorno.
-2. Verificar las comunicaciones entre los microservicios y completar las pruebas funcionales del Gateway.
-3. Verificar la nueva configuración de integración continua en GitHub Actions y establecer los controles de integración correspondientes.
-4. Ejecutar nuevamente las pruebas existentes y analizar sus resultados.
-5. ~~Investigar el test omitido por la incidencia de zona horaria.~~ Resuelto (4.9).
-6. Continuar investigando y documentando las incidencias funcionales y de seguridad pendientes.
-7. Implementar las funcionalidades pendientes según las tarjetas del backlog.
-8. Actualizar este documento con las correcciones realizadas y las pruebas que acrediten su funcionamiento.
+1. Resolver los riesgos de prioridad Alta de la sección 7 (aprobación de CAM-02, reverso fallido y cargo y abono después del plazo de espera).
+2. Investigar el fallo del Gateway tras reiniciar un servicio (prioridad Media, sección 7).
+3. Medir el efecto de la fila bloqueada durante llamadas HTTP (prioridad Media, sección 7).
+4. Seguir documentando las incidencias pendientes con el mismo formato: impacto, causa, corrección y verificación.
 
 ---
 
-**Nota:** este documento representa el diagnóstico inicial del equipo. Los hallazgos se irán actualizando conforme avance la investigación y se completen las tareas.
+**Nota:** este documento es el diagnóstico del equipo, actualizado el 22 de noviembre de 2026. Las incidencias marcadas como verificadas se han contrastado con las pruebas o con la ejecución descrita en cada sección.
+
+## Fuentes
+
+- Código y pruebas de cada incidencia: rutas indicadas en la sección 4 correspondiente.
+- Estados y decisiones: [decisiones.md](decisiones.md).
+- Diseño de servicios y mensajería: [arquitectura.md](arquitectura.md).
+- Reglas de fraude: [fraude.md](fraude.md).
+- Workflow de CI: `.github/workflows/ci.yml`.
