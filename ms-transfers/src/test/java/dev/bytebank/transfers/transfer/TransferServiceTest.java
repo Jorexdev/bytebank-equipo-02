@@ -321,7 +321,7 @@ void clientCannotSeeTransfersOfOtherUsers() {
 
 @Test
 void listPendingReturnsTransfersWaitingForApproval() {
-    when(transfers.findByStatus(eq(TransferStatus.PENDIENTE), any(Pageable.class)))
+    when(transfers.findByStatus(eq(TransferStatus.PENDIENTE_REVISION), any(Pageable.class)))
             .thenReturn(new PageImpl<>(List.of(pendingTransfer())));
 
     PageResponse<TransferResponse> page = service.listPending(0, 20);

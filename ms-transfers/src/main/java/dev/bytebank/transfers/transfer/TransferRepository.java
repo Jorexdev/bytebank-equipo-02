@@ -21,6 +21,6 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     @Modifying
     @Transactional
     @Query("update Transfer t set t.status = :newStatus " +
-            "where t.id = :id and t.status = dev.bytebank.transfers.transfer.TransferStatus.PENDIENTE")
+            "where t.id = :id and t.status = dev.bytebank.transfers.transfer.TransferStatus.PENDIENTE_REVISION")
     int updateStatusIfPending(@Param("id") Long id, @Param("newStatus") TransferStatus newStatus);
 }
