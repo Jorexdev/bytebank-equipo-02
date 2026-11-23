@@ -178,7 +178,7 @@ class TransferServiceTest {
     void transfersOver5000ArePendingWithoutMovingMoney() {
         Transfer t = service.create(new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("6000.00"), null), ANA);
 
-        assertThat(t.getStatus()).isEqualTo(TransferStatus.PENDIENTE);
+        assertThat(t.getStatus().name()).isEqualTo("PENDIENTE_REVISION");
         verify(accounts, never()).debit(anyString(), anyString(), any(), any(), any());
         verify(accounts, never()).credit(anyString(), anyString(), any(), any());
     }
@@ -207,7 +207,7 @@ class TransferServiceTest {
         Transfer t = service.create(
                 new CreateTransferRequest(ORIGIN, DESTINATION, new BigDecimal("1500.00"), null), ANA);
 
-        assertThat(t.getStatus()).isEqualTo(TransferStatus.PENDIENTE);
+        assertThat(t.getStatus().name()).isEqualTo("PENDIENTE_REVISION");
         verify(accounts, never()).debit(anyString(), anyString(), any(), any(), any());
         verify(accounts, never()).credit(anyString(), anyString(), any(), any());
     }
@@ -327,7 +327,7 @@ void listPendingReturnsTransfersWaitingForApproval() {
     PageResponse<TransferResponse> page = service.listPending(0, 20);
 
     assertThat(page.content()).hasSize(1);
-    assertThat(page.content().get(0).status()).isEqualTo(TransferStatus.PENDIENTE);
+    assertThat(page.content().get(0).status().name()).isEqualTo("PENDIENTE_REVISION");
 }
 
     @Test
